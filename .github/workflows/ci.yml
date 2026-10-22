@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      # VS Code needs a display. Linux runners have none, so the tests run under a virtual one.
+      - name: Test the extension inside VS Code
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:integration -w apps/vscode
+      - name: Test the extension inside VS Code
+        if: runner.os != 'Linux'
+        run: npm run test:integration -w apps/vscode
+
+      - name: Package the extension and test the installed package
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:vsix -w apps/vscode
+      - name: Package the extension and test the installed package
+        if: runner.os != 'Linux'
+        run: npm run test:vsix -w apps/vscode
+
+      - name: Keep the package
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: senior-vsix
+          path: apps/vscode/dist/senior.vsix

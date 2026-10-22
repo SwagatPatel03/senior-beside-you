@@ -1,101 +1,150 @@
-# A Senior Developer Beside You
+# Senior: a senior developer beside you
 
-This project builds the feeling of a senior developer sitting next to you while you code. The design is in [docs/architectures.md](docs/architectures.md). It is built in the order that tests the riskiest idea first:
+Coding with an AI agent is fast, but it is easy to end up with code you cannot explain. Senior keeps the speed and gives back the understanding. It works the way a good senior developer does when they sit next to you:
 
-| Stage | What | Status |
+- It settles the big decisions before any code is written, and names the traps most likely to hurt later.
+- It lets you write the lines that carry the logic, and fills in the routine code around them.
+- It explains each decision at the moment it matters, not in a lecture before or a summary after.
+- It remembers why things were done, and brings that reason back when you touch the code again.
+
+The design behind it is in [docs/architectures.md](docs/architectures.md).
+
+## The two parts
+
+| Part | What it is | Where |
 | --- | --- | --- |
-| Week 1 | **Architecture A**: senior mode for Claude Code, as a plugin | Built, in testing |
-| Weeks 2 to 4 | **Architecture B**: planner and fast narrator on the Agent SDK | Not started |
-| Weeks 4 to 8 | **Architecture C**: ghost pair VS Code extension on B | Not started |
-| Any time | **Architecture D**: shadow senior with replays | The recorder exists; the replay does not |
+| **The senior plugin for Claude Code** | Design sessions, a decision ledger with callbacks, a regret library of known failures, narration rules, onboarding for large repos, the project story, and pairing in your editor. | [`plugin/`](plugin) |
+| **Senior for VS Code** | The editor side of pairing: ghost text for the lines you write, routine code filled in, three gears for how hands-on you want to be, and a journal of the session. | [`apps/vscode/`](apps/vscode) |
 
-## What Architecture A gives you
+The plugin works on its own in any terminal. The extension needs the plugin, because Claude Code does the thinking and the extension is how it reaches your editor.
 
-| Part | Where it lives | What it does |
-| --- | --- | --- |
-| Design session | `/senior:design` | Before code, asks the two or three questions that change the design, names the three things most likely to hurt later, confirms examples that become the first tests, sorts decisions into one-way and two-way, and records them |
-| Narration rules | the **Senior** output style | One line before each step, quiet during boilerplate, expected results written before running, thinking out loud on failures, pushback on brute force, and "Verified / Not verified" at the end |
-| Decision ledger | `.senior/ledger/` in your project | One JSON file per decision: chosen, rejected, why, risk guarded, payoff, and where it lives in the code |
-| Consequence callbacks | hooks | When an edit or a failure touches code linked to an earlier decision, the senior brings that decision back. Matching is by file path and symbol name, never by guessing from words |
-| Regret library | `plugin/regrets/` and `.senior/regrets/` | Ten seed topics of known failures, read during the design session. `/senior:regret` adds your own |
-| Repo onboarding | `/senior:onboard` | Maps a large codebase once and writes `.senior/repo-map.md` |
-| Project story | `/senior:story` | Turns the ledger and session records into one page per module, written so you can tell it in an interview |
-| Why | `/senior:why` | Answers "why is it like this?" from the ledger, then carries on |
-| Decide | `/senior:decide` | Records a decision mid-build, or replaces one through an announced change |
+## Install
 
-## Install it on your own project
+You need [Claude Code](https://claude.com/claude-code) and Node.js 20 or later. Building the VS Code extension from source needs Node.js 22 or later.
 
-You need Node.js 20 or later and Claude Code.
-
-**Option 1: install it from GitHub.** Inside Claude Code:
+**The plugin.** Inside Claude Code:
 
 ```
 /plugin marketplace add SwagatPatel03/senior-beside-you
-/plugin install senior@senior-local
+/plugin install senior@senior-beside-you
 ```
 
-**Option 2: load it from a local clone for one session.**
+**The VS Code extension.** Build it from this repository and install the package:
 
 ```
 git clone https://github.com/SwagatPatel03/senior-beside-you.git
-cd your-project
-claude --plugin-dir "<path to>/senior-beside-you/plugin"
+cd senior-beside-you
+npm install
+npm run package -w apps/vscode
+code --install-extension apps/vscode/dist/senior.vsix
 ```
 
-Then, in your project:
+If you install the extension first, its panel offers to install the plugin for you. It shows the two commands before it runs them.
 
-1. Switch on the narration rules: run `/output-style senior:Senior`, or pick **Senior** from the `/output-style` menu. In a settings file, the name must include the plugin prefix: `"outputStyle": "senior:Senior"`. A plain `"Senior"` silently falls back to the default style.
-2. Start a feature with the design session: `/senior:design a gym class booking app where members book limited places`.
+## Use it
 
-The design session creates `.senior/` in your project. The hooks do nothing in projects without that folder, so the plugin stays out of the way elsewhere. Commit `.senior/` to git, except `sessions/` and `state/`, which its own `.gitignore` already excludes.
+Open your project and start Claude Code in its folder. Then:
 
-## The Week 1 tests
+| Command | What it does |
+| --- | --- |
+| `/senior:design <feature>` | Before code: asks the two or three questions that change the design, names the three things most likely to hurt later, confirms examples that become the first tests, sorts decisions into one-way and two-way, records them, and saves a step-by-step plan. |
+| `/senior:pair <feature>` | Builds the plan with you in VS Code. You type the important lines from ghost text, the routine code is filled in, each step is checked by running it, and each decision is linked to the code that carries it out. Runs the design session first if there is no plan. Use `/senior:pair continue <feature>` to pick up a plan. |
+| `/senior:why <question>` | Answers "why is it like this?" from the decision ledger, then carries on. |
+| `/senior:decide <decision>` | Records a decision in the middle of a build, or replaces one through an announced change. |
+| `/senior:onboard` | Maps a large codebase once and writes `.senior/repo-map.md`. |
+| `/senior:regret <lesson>` | Adds a failure you learned from to your project's regret library, so the next design session checks for it. |
+| `/senior:story` | Turns the ledger and session records into one page per module, written so you can tell it in an interview. |
 
-The architecture document asks two questions of Week 1. Here is how to answer each one.
+For narration in the terminal that follows the senior's rules (one line before each step, quiet during boilerplate, expected results written before running, and "Verified / Not verified" at the end), run `/output-style senior:Senior`. In a settings file the name needs the plugin prefix: `"outputStyle": "senior:Senior"`.
 
-**1. Does the design session catch the risks you would have missed?** Run the foresight test:
+Callbacks need no command. When an edit or a failure touches code linked to an earlier decision, the senior brings that decision back. Matching is by file path and symbol name, never by guessing from words.
+
+### What it keeps in your project
+
+The first design session creates `.senior/` in your project. The hooks do nothing in projects without it, so the plugin stays out of the way elsewhere.
+
+| Folder | What is in it |
+| --- | --- |
+| `ledger/` | One JSON file per decision: what was chosen, what was rejected and why, the risk it guards, and where it lives in the code. |
+| `features/` | The plan for each feature and its design brief. |
+| `regrets/` | Your own regret library entries, read alongside the seed library in [`plugin/regrets/`](plugin/regrets). |
+| `story/` | The project story, one page per module. |
+| `sessions/`, `state/` | Records of what happened in each session, used for the story. Not committed: `.senior/.gitignore` leaves them out. |
+
+Commit the rest of `.senior/` with your code. It is the memory of why your code is the way it is.
+
+## How the editor connection works
+
+```
+Claude Code ── senior plugin ── editor bridge (MCP, stdio)
+                                      │
+                                      │  HTTP on 127.0.0.1, random port, per-window token
+                                      ▼
+                         VS Code ── Senior extension ── ghost text, panel, journal
+```
+
+Each VS Code window with the extension writes a lock file to `~/.senior/ide/` with its port and a random token, readable only by your user. The bridge picks the window whose folder contains the folder Claude Code is working in. The extension refuses requests without the token and every request that comes from a web page. Neither part sends anything over the internet; Claude Code does the model work under your own account.
+
+## Does the design session catch the risks you would miss?
+
+This is the riskiest idea in the design, so it has its own test. Run:
 
 ```
 npm run eval:foresight -- --conditions with,without,plain
 ```
 
-It runs the design session in dry-run mode on eight feature requests that each hide a known trap. Five traps are in the regret library (double booking, timezones, a query inside a loop, unlimited uploads, duplicate payment webhooks). Three are deliberately left out of it (soft-deleted users signing up again, an email sent before the database commit, offset pagination on a live feed), so the test also shows whether the senior generalises or only repeats the library. A separate judge model decides whether each trap was named before code. The proposed pass mark is at least 4 of the 5 library traps named with the library.
+It runs the design session in dry-run mode on eight feature requests that each hide a known trap. Five traps are in the regret library: double booking, timezones, a query inside a loop, unlimited uploads and duplicate payment webhooks. Three are deliberately left out of it: soft-deleted users signing up again, an email sent before the database commit, and offset pagination on a live feed. That way the test also shows whether the senior generalises or only repeats the library. A separate judge model decides whether each trap was named before code. The pass mark is at least four of the five library traps named with the library.
 
-Each run calls Claude, so it uses your plan's usage. Start with `--tasks double-booking,timezones` and `--runs 1`, and use `--runs 3` before trusting a result, because one run can be lucky. `--regrade <results folder>` re-judges saved transcripts without rerunning the design sessions.
-
-**2. Do callbacks land at the right moments?** This needs real use. Build a small feature on your own project across at least two sessions on different days. In the second session, note each time a "Senior ledger callback" appeared and whether the senior's comment was useful, noise, or missing when it should have appeared. `.senior/sessions/` records every callback, so `node plugin/cli/senior.mjs sessions --all` shows them afterwards.
+Each run calls Claude, so it uses your plan's usage. Start with `--tasks double-booking,timezones` and `--runs 1`, and use `--runs 3` before trusting a result, because one run can be lucky. `--regrade <results folder>` judges saved transcripts again without rerunning the design sessions.
 
 ## The Senior CLI
 
-The skills call it, and you can too. Run it from your project folder:
+The skills use it, and you can too. Run it from your project folder:
 
 ```
 node "<path to>/plugin/cli/senior.mjs" status
-node "<path to>/plugin/cli/senior.mjs" ledger list
 node "<path to>/plugin/cli/senior.mjs" ledger find src/bookings/service.py
-node "<path to>/plugin/cli/senior.mjs" regrets list
+node "<path to>/plugin/cli/senior.mjs" plan list
+node "<path to>/plugin/cli/senior.mjs" sessions --all
 ```
 
 Run it with no arguments to see every command.
 
-## Developing
+## Develop
 
 ```
-npm test           # unit tests and simulated hook sessions
-npm run validate   # claude plugin validate on the plugin and the marketplace
+npm install
+npm test                                   # plugin tests and the extension's unit tests
+npm run typecheck
+npm run build
+npm run test:integration -w apps/vscode    # the extension inside a real VS Code
+npm run test:vsix -w apps/vscode           # packages the extension and tests the installed package
+npm run test:e2e -w apps/vscode            # a real Claude Code session pairing in VS Code
+npm run validate                           # checks the plugin and marketplace manifests
 ```
 
-Set `SENIOR_DEBUG=1` before starting Claude Code to log every hook input and error to `.senior/state/debug.log`.
+The integration tests download VS Code into `apps/vscode/.vscode-test/` the first time. The end-to-end test uses your Claude Code login and takes a few minutes. Set `SENIOR_DEBUG=1` before starting Claude Code to log every hook input and error to `.senior/state/debug.log`.
 
-## What is not built yet
+| Folder | What is in it |
+| --- | --- |
+| `plugin/core/` | The shared library: ledger, plans, regret library, callbacks, session records. No dependencies and no knowledge of Claude Code or VS Code. |
+| `plugin/cli/` | The Senior CLI, the only writer of the ledger. |
+| `plugin/hooks/`, `plugin/bridge/` | Thin wrappers that connect the core to Claude Code and to the editor. |
+| `plugin/skills/`, `plugin/output-styles/`, `plugin/regrets/` | Prompts and data. |
+| `apps/vscode/` | The VS Code extension. |
+| `evals/foresight/` | The test of the design session. |
+| `test/` | Tests for the plugin. |
 
-These parts of the design are not in Architecture A and are left for later stages:
+## Limits
 
-- **The sandbox.** Destructive commands are discouraged by the output style, which is only an instruction. The design calls for a sandbox that makes them impossible. Until then, turn on Claude Code's sandbox (`/sandbox`) and keep production credentials out of the project.
-- **Mechanical checks.** Secret scanning, database access rule checks, and the "a fix's test must fail without the fix" check are not automated yet. The output style asks for them, which is weaker.
-- **Live narration.** A still works in bursts. Silence while it thinks (H1) and line-by-line writing (H2) need Architectures B and C.
-- **Replays.** The recorder from Architecture D exists, because the project story needs it. The narrated replay does not.
+- **Destructive commands** are discouraged by the senior's rules, which are only instructions. Turn on Claude Code's sandbox (`/sandbox`) and keep production credentials out of the project.
+- **Mechanical checks** such as secret scanning and "a fix's test must fail without the fix" are asked for by the narration rules, not enforced by code.
+- **Other inline suggestion extensions**, such as GitHub Copilot, can take the place of Senior's ghost text while you pair. Pause them during a session.
 
 ## Regret library sources
 
 The seed entries describe well-known failure patterns from sources such as the OWASP cheat sheets, payment provider documentation and ORM guides. Each entry names its source in general terms. When you find a real postmortem or issue thread for an entry, add the link to its **Source** line.
+
+## License
+
+MIT
