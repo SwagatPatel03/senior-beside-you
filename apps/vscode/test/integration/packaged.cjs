@@ -15,9 +15,12 @@ exports.run = async function run() {
   const installed = path.resolve(extension.extensionPath).toLowerCase();
   assert.ok(installed.startsWith(path.resolve(process.env.SENIOR_TEST_EXTENSIONS_DIR).toLowerCase()), `Senior runs from the installed package, not from ${extension.extensionPath}`);
 
-  for (const rel of ['dist/extension.js', 'dist/webview.js', 'dist/webview.css', 'media/senior-icons.ttf', 'media/spectacles.svg', 'README.md', 'LICENSE.txt']) {
+  for (const rel of ['dist/extension.js', 'dist/webview.js', 'dist/webview.css', 'media/senior-icons.ttf', 'media/spectacles.svg']) {
     assert.ok(fs.existsSync(path.join(extension.extensionPath, rel)), `the package contains ${rel}`);
   }
+  // vsce renames these (readme.md, LICENSE.txt), and only some file systems ignore case.
+  const top = fs.readdirSync(extension.extensionPath).map((f) => f.toLowerCase());
+  for (const name of ['readme.md', 'changelog.md', 'license.txt']) assert.ok(top.includes(name), `the package contains ${name}`);
   const regrets = fs.readdirSync(path.join(extension.extensionPath, 'dist', 'regrets')).filter((f) => f.endsWith('.md'));
   assert.ok(regrets.length >= 10, 'the package carries the regret library');
   for (const rel of ['src', 'test', 'webview', 'node_modules']) assert.ok(!fs.existsSync(path.join(extension.extensionPath, rel)), `the package leaves out ${rel}/`);
