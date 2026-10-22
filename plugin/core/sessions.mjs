@@ -91,6 +91,10 @@ export function digestSessions(sessions, { since = '' } = {}) {
       else if (e.type === 'command') commands++;
       else if (e.type === 'failure') out.push(`- Failure in \`${oneLine(e.command || e.tool, 120)}\`: ${oneLine(e.snippet, 300)}`);
       else if (e.type === 'callback') out.push(`- Callback fired: ${e.decision} because ${e.reasons.join(', ')} was ${e.trigger === 'failure' ? 'in a failure' : 'edited'}.`);
+      else if (e.type === 'step') out.push(`- Step ${e.status}: ${oneLine(e.title, 160)}${e.summary ? `. ${oneLine(e.summary, 240)}` : ''}`);
+      else if (e.type === 'takeaway') out.push(`- Takeaway: ${oneLine(e.text, 300)}`);
+      else if (e.type === 'typed') out.push(`- The user wrote ${e.lines} line${e.lines === 1 ? '' : 's'} by hand in ${e.file}${e.gear ? ` (${e.gear} gear)` : ''}.`);
+      else if (e.type === 'replay') out.push(`- A replay was built: ${oneLine(e.title, 160)} (${e.id}).`);
     }
     if (edited.size) out.push(`- Files changed: ${[...edited].join(', ')}`);
     if (commands) out.push(`- Commands that ran cleanly: ${commands}`);

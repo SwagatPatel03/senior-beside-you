@@ -14,6 +14,6 @@ await runHook(async (input, root) => {
   const text = statusText(root, { cli: `node "${cliPath}"` });
   const state = loadState(root, sessionId);
   saveState(root, sessionId, state);
-  appendEvent(root, sessionId, { type: 'start', source: input.source || '' });
+  appendEvent(root, sessionId, { type: 'start', source: input.source || '', transcript: input.transcript_path || '' });
   addContext('SessionStart', text);
 });

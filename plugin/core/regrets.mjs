@@ -10,7 +10,21 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { seniorPath } from './paths.mjs';
 
-export const SEED_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'regrets');
+let seedDir = '';
+
+/**
+ * Where the seed library lives. Bundled hosts (the VS Code extension, the terminal app) ship the
+ * Markdown files next to their bundle and call `setSeedDir`, because `import.meta.url` does not
+ * point at this folder once the code is bundled.
+ */
+export function defaultSeedDir() {
+  if (!seedDir) seedDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'regrets');
+  return seedDir;
+}
+
+export function setSeedDir(dir) {
+  seedDir = dir;
+}
 
 export function regretsDisabled() {
   return String(process.env.SENIOR_REGRETS || '').toLowerCase() === 'off';
@@ -54,9 +68,9 @@ function readDir(dir, origin) {
     .map((f) => ({ ...parseTopic(fs.readFileSync(path.join(dir, f), 'utf8'), path.join(dir, f)), origin }));
 }
 
-export function loadRegrets(root, { seedDir = SEED_DIR } = {}) {
+export function loadRegrets(root, { seedDir: dir = defaultSeedDir() } = {}) {
   if (regretsDisabled()) return [];
-  const topics = readDir(seedDir, 'seed');
+  const topics = readDir(dir, 'seed');
   if (root) topics.push(...readDir(seniorPath(root, 'regrets'), 'project'));
   return topics;
 }
