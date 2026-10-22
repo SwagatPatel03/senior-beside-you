@@ -85,9 +85,12 @@ export function matchesAny(rel, globs = []) {
 /** Pull path-like tokens out of free text, such as a stack trace or a test report. */
 export function pathsInText(root, text) {
   if (!text) return [];
-  // Node and browsers write stack trace paths as file URLs, with spaces as %20.
+  // Node and browsers write stack trace paths as file URLs, with spaces as %20. The slash after
+  // "file://" starts the path on Linux and macOS (file:///tmp/x), but not before a Windows drive
+  // letter (file:///C:/x).
   text = text
-    .replace(/file:\/\/\/?/gi, '')
+    .replace(/file:\/\/\/?([A-Za-z]:[\\/])/gi, '$1')
+    .replace(/file:\/\//gi, '')
     .replace(/((?:%[0-9A-Fa-f]{2})+)/g, (m) => {
       try {
         return decodeURIComponent(m);
