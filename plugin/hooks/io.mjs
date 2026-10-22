@@ -1,0 +1,49 @@
+// Shared plumbing for the hook scripts. A hook must never break the user's session,
+// so every failure here ends in a silent exit 0. SENIOR_DEBUG=1 writes errors and raw
+// inputs to `.senior/state/debug.log` so problems can still be found.
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { findRoot, seniorPath } from '../core/paths.mjs';
+
+export async function readInput() {
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(chunk);
+  const raw = Buffer.concat(chunks).toString('utf8');
+  return raw.trim() ? JSON.parse(raw) : {};
+}
+
+/** The project root that holds `.senior/`, or null when senior is not set up in this project. */
+export function projectRoot(input) {
+  return findRoot(process.env.CLAUDE_PROJECT_DIR) || findRoot(input.cwd);
+}
+
+export function debug(root, label, value) {
+  if (!process.env.SENIOR_DEBUG || !root) return;
+  try {
+    const file = seniorPath(root, 'state', 'debug.log');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(file, `${new Date().toISOString()} ${label} ${typeof value === 'string' ? value : JSON.stringify(value)}\n`);
+  } catch {
+    // Debug logging is best effort.
+  }
+}
+
+export function addContext(eventName, text) {
+  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: eventName, additionalContext: text } }));
+}
+
+/** Run a hook body and swallow every error, so a bug in senior never blocks Claude. */
+export async function runHook(body) {
+  let input = {};
+  let root = null;
+  try {
+    input = await readInput();
+    root = projectRoot(input);
+    if (!root) return;
+    debug(root, `${input.hook_event_name || 'hook'} input`, input);
+    await body(input, root);
+  } catch (err) {
+    debug(root, 'error', err && err.stack ? err.stack : String(err));
+  }
+}

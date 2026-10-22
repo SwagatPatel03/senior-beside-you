@@ -1,0 +1,53 @@
+{
+  "about": "Feature requests with a known trap. The prompts describe what the user wants, never the trap. 'library' tasks have a matching regret library entry. 'held-out' tasks deliberately do not, to check whether the senior generalises or only repeats the library. The seed library must never mention a held-out trap; test/core.test.mjs checks this.",
+  "tasks": [
+    {
+      "id": "double-booking",
+      "set": "library",
+      "prompt": "A gym class booking app. Members see this week's classes and book a place. Each class has a limited number of places. Members can cancel.",
+      "trap": "Two members booking the last place at the same moment (a race between checking capacity and inserting the booking), so the class is overbooked. Naming concurrency, atomic booking, a unique constraint, a row lock or an atomic conditional update for capacity counts."
+    },
+    {
+      "id": "timezones",
+      "set": "library",
+      "prompt": "Our gym chain is opening branches in other countries. Add a weekly class schedule page and send each member a reminder one hour before their class.",
+      "trap": "Timezones and daylight saving time: class times stored or computed without the branch's timezone, so schedules and reminders shift by hours or break when clocks change. Naming UTC storage plus a timezone per branch, or daylight saving problems, counts."
+    },
+    {
+      "id": "n-plus-one",
+      "set": "library",
+      "prompt": "An admin page that lists all of today's bookings across every branch, showing the member's name, the class name and the trainer's name for each booking.",
+      "trap": "The N+1 query problem: fetching the member, class and trainer with a separate database query for each booking row, so the page becomes very slow with many bookings. Naming N+1, a query inside a loop, lazy loading, or the need for joins or eager loading counts."
+    },
+    {
+      "id": "unlimited-uploads",
+      "set": "library",
+      "prompt": "Let members upload a profile photo, and let trainers upload workout videos for their classes.",
+      "trap": "No limit on upload size (or count), so one huge file exhausts memory, disk or storage budget. Naming a maximum file size, streaming instead of reading into memory, or size limits on pre-signed uploads counts. Only file type checks do not count."
+    },
+    {
+      "id": "duplicate-webhooks",
+      "set": "library",
+      "prompt": "Monthly membership payments with Stripe. When a payment succeeds, extend the member's membership by one month.",
+      "trap": "Payment webhooks delivered more than once or out of order, so one payment extends the membership twice. Naming idempotency, storing processed event ids, or duplicate or retried webhook delivery counts."
+    },
+    {
+      "id": "soft-delete-resignup",
+      "set": "held-out",
+      "prompt": "Let users delete their account. They must be able to come back later and sign up again with the same email address. We must keep their past orders for accounting.",
+      "trap": "Keeping the old user row (a soft delete or anonymisation) conflicts with a unique constraint on email, so the same email cannot sign up again, or deleted users still appear in queries and logins. Naming the clash between keeping the row and email uniqueness, or the need to filter deleted users everywhere, counts."
+    },
+    {
+      "id": "email-before-commit",
+      "set": "held-out",
+      "prompt": "When a customer places an order, save the order and send them a confirmation email.",
+      "trap": "Sending the email inside or before the database transaction commits, so a customer gets a confirmation for an order that was rolled back, or the order saves but the email is lost. Naming sending after commit, an outbox table, or a background job queued only after the commit counts."
+    },
+    {
+      "id": "offset-feed",
+      "set": "held-out",
+      "prompt": "An infinite-scroll feed showing the newest posts first, loading 20 at a time as the user scrolls.",
+      "trap": "Offset-based pagination on a feed that changes: new posts arriving between page loads shift the offsets, so users see duplicates or miss posts (and large offsets get slow). Naming cursor or keyset pagination, or duplicates and skipped posts when new items arrive, counts."
+    }
+  ]
+}

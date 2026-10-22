@@ -1,0 +1,16 @@
+{
+  "name": "senior-local",
+  "owner": {
+    "name": "Swagat Swaroop Patel"
+  },
+  "plugins": [
+    {
+      "name": "senior",
+      "source": "./plugin",
+      "description": "A senior developer beside you, built on Claude Code."
+    }
+  ],
+  "metadata": {
+    "description": "Local marketplace for the senior plugin while it is being built."
+  }
+}
