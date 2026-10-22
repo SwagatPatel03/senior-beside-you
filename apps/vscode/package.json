@@ -1,0 +1,235 @@
+{
+  "name": "senior",
+  "displayName": "Senior: a senior developer beside you",
+  "description": "Write the important lines yourself while a senior developer explains why. Ghost text for the logic, the boilerplate filled in, and every decision remembered.",
+  "version": "0.1.0",
+  "publisher": "swagatpatel",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SwagatPatel03/senior-beside-you"
+  },
+  "bugs": {
+    "url": "https://github.com/SwagatPatel03/senior-beside-you/issues"
+  },
+  "homepage": "https://github.com/SwagatPatel03/senior-beside-you#readme",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Education",
+    "AI",
+    "Other"
+  ],
+  "keywords": [
+    "learning",
+    "pair programming",
+    "mentor",
+    "claude",
+    "ghost text"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "senior",
+          "title": "Senior",
+          "icon": "media/spectacles.svg"
+        }
+      ]
+    },
+    "icons": {
+      "senior-spectacles": {
+        "description": "Senior",
+        "default": {
+          "fontPath": "media/senior-icons.ttf",
+          "fontCharacter": "\\E000"
+        }
+      }
+    },
+    "views": {
+      "senior": [
+        {
+          "type": "webview",
+          "id": "senior.panel",
+          "name": "Session"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "senior.askWhy",
+        "title": "Why is this line here?",
+        "category": "Senior"
+      },
+      {
+        "command": "senior.cycleGear",
+        "title": "Change gear (type, accept, watch)",
+        "category": "Senior"
+      },
+      {
+        "command": "senior.gearType",
+        "title": "Gear: type the important lines",
+        "category": "Senior"
+      },
+      {
+        "command": "senior.gearAccept",
+        "title": "Gear: accept with Tab while reading why",
+        "category": "Senior"
+      },
+      {
+        "command": "senior.gearWatch",
+        "title": "Gear: watch it typed",
+        "category": "Senior"
+      },
+      {
+        "command": "senior.takeOver",
+        "title": "Take over typing",
+        "category": "Senior"
+      },
+      {
+        "command": "senior.fillIn",
+        "title": "Fill in this piece for me",
+        "category": "Senior"
+      },
+      {
+        "command": "senior.skipPiece",
+        "title": "Skip this piece",
+        "category": "Senior"
+      },
+      {
+        "command": "senior.focus",
+        "title": "Show the Senior panel",
+        "category": "Senior"
+      },
+      {
+        "command": "senior.setupClaudeCode",
+        "title": "Set up Claude Code for Senior",
+        "category": "Senior"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "senior.askWhy",
+        "key": "ctrl+alt+/",
+        "mac": "cmd+alt+/",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "senior.cycleGear",
+        "key": "ctrl+alt+g",
+        "mac": "cmd+alt+g"
+      },
+      {
+        "command": "senior.takeOver",
+        "key": "escape",
+        "when": "editorTextFocus && senior.watching"
+      }
+    ],
+    "configuration": {
+      "title": "Senior",
+      "properties": {
+        "senior.gear": {
+          "type": "string",
+          "enum": [
+            "type",
+            "accept",
+            "watch"
+          ],
+          "enumDescriptions": [
+            "You type the important lines. The ghost text shows the rest of each line.",
+            "The whole piece shows as ghost text. Press Tab to accept it while you read why.",
+            "Senior types the piece at reading speed. Press Escape to take over."
+          ],
+          "default": "type",
+          "description": "How hands-on you want to be. You can change it at any time from the panel."
+        },
+        "senior.watchSpeed": {
+          "type": "number",
+          "default": 40,
+          "minimum": 5,
+          "maximum": 400,
+          "description": "Characters per second when Senior types in the watch gear."
+        },
+        "senior.readAloud": {
+          "type": "boolean",
+          "default": false,
+          "description": "Read narration aloud with your system voice."
+        }
+      }
+    },
+    "colors": [
+      {
+        "id": "senior.slotBackground",
+        "description": "Background of the lines you are writing.",
+        "defaults": {
+          "dark": "#B59A5B1A",
+          "light": "#8C744014",
+          "highContrast": "#00000000"
+        }
+      },
+      {
+        "id": "senior.slotBorder",
+        "description": "Left border of the lines you are writing.",
+        "defaults": {
+          "dark": "#B59A5B99",
+          "light": "#8C7440AA",
+          "highContrast": "#FFD000"
+        }
+      },
+      {
+        "id": "senior.filledBackground",
+        "description": "Brief highlight on code Senior filled in.",
+        "defaults": {
+          "dark": "#8A9A7B22",
+          "light": "#5F735618",
+          "highContrast": "#00000000"
+        }
+      },
+      {
+        "id": "senior.hintForeground",
+        "description": "Hints shown at the end of the line you are writing.",
+        "defaults": {
+          "dark": "#9C9384",
+          "light": "#7A7062",
+          "highContrast": "#FFFFFF"
+        }
+      },
+      {
+        "id": "senior.divergedForeground",
+        "description": "Marks a line that differs from the plan.",
+        "defaults": {
+          "dark": "#C08A82",
+          "light": "#8A4A44",
+          "highContrast": "#FF8080"
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc -p tsconfig.json && tsc -p webview/tsconfig.json",
+    "test": "node --test \"test/unit/*.test.ts\"",
+    "test:integration": "node esbuild.mjs && node test/integration/run.mjs",
+    "package": "node esbuild.mjs --production && vsce package --no-dependencies --out dist/senior.vsix",
+    "preview": "node scripts/preview.mjs",
+    "icons": "node scripts/make-icon.mjs && node scripts/make-icon-font.mjs",
+    "test:vsix": "npm run package && node test/integration/run.mjs --vsix",
+    "test:e2e": "node esbuild.mjs && node test/integration/run.mjs --e2e"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "@types/vscode": "1.95.0",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.0.0",
+    "esbuild": "0.28.2",
+    "preact": "10.29.8",
+    "typescript": "5.9.3"
+  }
+}

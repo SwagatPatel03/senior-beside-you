@@ -1,12 +1,22 @@
 {
-  "name": "senior-developer",
-  "version": "0.1.0",
+  "name": "senior-beside-you",
+  "version": "0.2.0",
   "private": true,
-  "description": "A senior developer beside you. Architecture A first, as a Claude Code plugin.",
+  "description": "A senior developer beside you: decides the big things first, remembers why, and keeps you hands-on without slowing you down.",
+  "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "test": "node --test \"test/*.test.mjs\"",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test:plugin && npm run test --workspaces --if-present",
+    "test:plugin": "node --test \"test/*.test.mjs\"",
     "validate": "claude plugin validate ./plugin && claude plugin validate .",
     "eval:foresight": "node evals/foresight/run.mjs"
   }

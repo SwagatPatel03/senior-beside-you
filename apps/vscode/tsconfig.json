@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node", "vscode"],
+    // The extension is bundled by esbuild. Only the pure modules under src/guide/text.ts and
+    // src/panel/protocol.ts run directly in Node (unit tests), and they contain no classes.
+    "erasableSyntaxOnly": false
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

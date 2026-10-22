@@ -1,0 +1,11 @@
+{
+  "name": "senior-packaged-test-host",
+  "displayName": "Test host for the packaged Senior extension",
+  "description": "An empty extension that only hosts the packaged test suite, so VS Code loads Senior from the installed VSIX.",
+  "version": "0.0.0",
+  "publisher": "swagatpatel",
+  "private": true,
+  "engines": {
+    "vscode": "^1.95.0"
+  }
+}
