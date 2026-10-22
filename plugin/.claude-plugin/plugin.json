@@ -1,8 +1,8 @@
 {
   "name": "senior",
   "displayName": "Senior Developer Beside You",
-  "version": "0.1.0",
-  "description": "Architecture A: a senior mode for Claude Code. A design session before code, narration at the moments that matter, a decision ledger, consequence callbacks, a regret library and a project story.",
+  "version": "0.2.0",
+  "description": "A senior developer beside you, inside Claude Code: a design session before code, narration at the moments that matter, a decision ledger with callbacks, a regret library, guided pairing in your editor, and a project story.",
   "author": {
     "name": "Swagat Swaroop Patel"
   },

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "editor": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/bridge/server.mjs"],
+      "timeout": 120000
+    }
+  }
+}

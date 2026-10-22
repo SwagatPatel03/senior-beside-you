@@ -86,8 +86,27 @@ After the user confirms (skip this step in a dry run, but show what you would ha
 
    `checks` is needed only for one-way decisions. Leave `files` and `symbols` empty if the code does not exist yet. You will link them while building.
 
-2. Write the feature brief to `.senior/features/<feature-slug>.md` with these sections: **Goal** (two sentences), **Answers** (the user's answers), **Risks** (the top three, as in Step 3), **Examples** (as confirmed), **Decisions** (ids and titles), and **Steps**. The steps are an ordered list of small steps, each with what to build, why, and the expected result you will check. The first step is always to turn the examples into tests and see them fail.
+2. Save the plan with `senior plan save`, passing JSON on stdin with a heredoc. It writes both the machine-readable plan and the brief in `.senior/features/`, so `/senior:pair`, the editor and the terminal app can all continue it. Use this shape:
+
+```json
+{
+  "feature": "gym-bookings",
+  "title": "Gym class bookings",
+  "goal": "Members book a place in this week's classes. A class never holds more people than its capacity.",
+  "decisions": ["D-001 Bookings are made atomic with a unique constraint on the slot"],
+  "examples": ["Booking a full 9:00 slot shows 'This slot is taken'"],
+  "design": {
+    "answers": [{ "question": "One gym or several branches?", "answer": "One gym for now." }],
+    "risks": [{ "title": "Two members take the last place", "scene": "...", "cause": "...", "prevention": "...", "regret": "R-bookings-01" }]
+  },
+  "steps": [
+    { "title": "Turn the examples into tests", "why": "They define done.", "expect": "Three tests fail because booking does not exist yet.", "files": ["tests/test_bookings.py"], "check": "pytest tests/test_bookings.py" }
+  ]
+}
+```
+
+   Keep each step small enough to review in about a minute. Each step names the files it touches, the expected result, and the command that checks it. The first step is always to turn the examples into tests and see them fail.
 
 ## Step 7. Hand over
 
-End with three or four sentences: what you decided, the one risk to keep in mind, and the first step. Then start the first step unless the user wants to pause.
+End with three or four sentences: what you decided, the one risk to keep in mind, and the first step. Then start the first step unless the user wants to pause. If the Senior editor extension is connected, build the steps with `/senior:pair continue <feature>` so the user writes the important lines themselves.

@@ -1,5 +1,5 @@
 {
-  "name": "senior-local",
+  "name": "senior-beside-you",
   "owner": {
     "name": "Swagat Swaroop Patel"
   },
@@ -7,10 +7,10 @@
     {
       "name": "senior",
       "source": "./plugin",
-      "description": "A senior developer beside you, built on Claude Code."
+      "description": "A senior developer beside you: design first, narration that matters, a decision ledger, and guided pairing in your editor."
     }
   ],
   "metadata": {
-    "description": "Local marketplace for the senior plugin while it is being built."
+    "description": "Senior, a senior developer beside you, for Claude Code."
   }
 }
