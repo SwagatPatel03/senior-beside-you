@@ -50,13 +50,17 @@ exports.run = async function run() {
   const end = Date.now() + 20000;
   while (!api.session.active && Date.now() < end) await sleep(40);
   assert.ok(api.session.active, 'the piece reached the editor');
+  // The panel was focused above, and on a slow machine it can finish loading after the guide has
+  // opened the file. A person would click into the editor; the test does the same.
+  await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
+  await sleep(200);
   for (const ch of "function greet(name) {\n  return `Hello, ${name}`;\n}") {
     if (!api.session.active) break;
     await vscode.commands.executeCommand('type', { text: ch });
     await sleep(15);
   }
   const { result } = await pending;
-  assert.equal(result.status, 'done', JSON.stringify(result));
+  assert.equal(result.status, 'done', `${JSON.stringify(result)}\nThe piece holds: ${JSON.stringify(api.guide.inspect())}`);
   assert.equal(result.results[0].status, 'typed');
   const written = fs.readFileSync(path.join(workspace, 'src', 'greet.js'), 'utf8').replace(/\r\n/g, '\n');
   assert.equal(written, "'use strict';\n\nfunction greet(name) {\n  return `Hello, ${name}`;\n}\nmodule.exports = { greet };\n");
