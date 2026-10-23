@@ -7,7 +7,7 @@
     {
       "name": "senior",
       "source": "./plugin",
-      "description": "A senior developer beside you: design first, narration that matters, a decision ledger, and guided pairing in your editor."
+      "description": "A senior developer beside you: design first, narration that matters, a decision ledger, guided pairing in your editor, and replays of fast work."
     }
   ],
   "metadata": {

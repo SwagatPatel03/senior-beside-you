@@ -87,7 +87,7 @@ test('the bridge completes the MCP handshake and lists its tools', async () => {
     assert.equal(unknownVersion.result.protocolVersion, '2025-11-25');
 
     const list = await bridge.request('tools/list');
-    assert.deepEqual(list.result.tools.map((t) => t.name), ['status', 'begin_step', 'guide', 'wait', 'say', 'show_check', 'open_file', 'end_step']);
+    assert.deepEqual(list.result.tools.map((t) => t.name), ['status', 'begin_step', 'guide', 'wait', 'say', 'show_check', 'open_file', 'show_replay', 'end_step']);
 
     const missing = await bridge.request('nope/method');
     assert.equal(missing.error.code, -32601);

@@ -119,6 +119,22 @@ export const TOOLS = [
     },
   },
   {
+    name: 'show_replay',
+    description: [
+      'Open a saved replay in the Senior panel and wait while the user watches it.',
+      'The user moves between scenes on their own and opens each change side by side.',
+      'Returns status "question" when the user asks something (answer each userQuestions item with say, then call show_replay again with the same id),',
+      '"waiting" after about 90 seconds (call it again to keep waiting), or "finished" or "closed" when the user is done.',
+      'Calling it again for the replay that is open keeps the user on the scene they are reading.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'The replay id printed by "replay save" or "replay list".' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'end_step',
     description: 'Close the current step in the Senior panel: what changed, what you verified by running something, what you did not verify, and one takeaway. The takeaway is saved for the project story.',
     inputSchema: {
@@ -136,4 +152,4 @@ export const TOOLS = [
 ];
 
 export const INSTRUCTIONS =
-  'These tools drive the Senior panel and ghost text in the user\'s editor during /senior:pair. The user writes the spine of the code by hand; flesh is filled in for them. ' + questionsNote;
+  'These tools drive the Senior panel and ghost text in the user\'s editor during /senior:pair, and show replays during /senior:replay. The user writes the spine of the code by hand; flesh is filled in for them. ' + questionsNote;
