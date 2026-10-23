@@ -5,6 +5,7 @@ import * as vscode from 'vscode';
 import type { Divergence, Gear } from '../panel/protocol.ts';
 
 const FILLED_FOR_MS = 1800;
+const EVIDENCE_FOR_MS = 30_000;
 
 export class Decorations implements vscode.Disposable {
   private readonly slot = vscode.window.createTextEditorDecorationType({
@@ -32,7 +33,30 @@ export class Decorations implements vscode.Disposable {
     backgroundColor: new vscode.ThemeColor('senior.filledBackground'),
   });
 
+  private readonly evidence = vscode.window.createTextEditorDecorationType({
+    isWholeLine: true,
+    backgroundColor: new vscode.ThemeColor('senior.evidenceBackground'),
+    borderColor: new vscode.ThemeColor('senior.divergedForeground'),
+    borderStyle: 'solid',
+    borderWidth: '0 0 0 2px',
+    overviewRulerColor: new vscode.ThemeColor('senior.divergedForeground'),
+    overviewRulerLane: vscode.OverviewRulerLane.Left,
+  });
+
   private filledTimer: NodeJS.Timeout | undefined;
+  private evidenceTimer: NodeJS.Timeout | undefined;
+
+  /** Mark the line a failing check points at, until the next guide or for half a minute. */
+  markEvidence(editor: vscode.TextEditor, line: number): void {
+    editor.setDecorations(this.evidence, [new vscode.Range(line, 0, line, 0)]);
+    clearTimeout(this.evidenceTimer);
+    this.evidenceTimer = setTimeout(() => editor.setDecorations(this.evidence, []), EVIDENCE_FOR_MS);
+  }
+
+  clearEvidence(): void {
+    clearTimeout(this.evidenceTimer);
+    for (const e of vscode.window.visibleTextEditors) e.setDecorations(this.evidence, []);
+  }
 
   showSlot(editor: vscode.TextEditor, lines: vscode.Range, cursorLine: number, gear: Gear, divergence?: Divergence): void {
     editor.setDecorations(this.slot, [lines]);
@@ -64,6 +88,8 @@ export class Decorations implements vscode.Disposable {
 
   dispose(): void {
     clearTimeout(this.filledTimer);
+    clearTimeout(this.evidenceTimer);
+    this.evidence.dispose();
     this.slot.dispose();
     this.hint.dispose();
     this.diverged.dispose();

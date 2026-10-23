@@ -4,6 +4,31 @@
 export type Gear = 'type' | 'accept' | 'watch';
 export type PieceKind = 'spine' | 'flesh' | 'probe';
 
+/** A line in a project file. */
+export interface Place {
+  file: string;
+  line: number;
+}
+
+/** A ledger decision as the panel shows it when the user asks why. */
+export interface DecisionView {
+  id: string;
+  title: string;
+  chosen: string;
+  why: string;
+  rejected: { option: string; why: string }[];
+}
+
+/** What Claude Code is doing right now, from the plugin's activity hook. */
+export interface Activity {
+  state: 'working' | 'thinking' | 'idle';
+  label?: string;
+  /** True when the work belongs to a helper, such as the navigator preparing the next step. */
+  helper?: boolean;
+  /** When this activity started, in milliseconds since 1970. */
+  since: number;
+}
+
 export type PieceStatus = 'waiting' | 'active' | 'typed' | 'accepted' | 'watched' | 'filled' | 'kept_own' | 'skipped' | 'failed';
 
 export interface PieceView {
@@ -15,6 +40,8 @@ export interface PieceView {
   status: PieceStatus;
   expect?: string;
   detail?: string;
+  notice?: string;
+  decision?: string;
 }
 
 export interface StepInfo {
@@ -24,6 +51,8 @@ export interface StepInfo {
   why: string;
   expect: string;
   feature?: string;
+  /** The risk the plan named for this step, recalled when its check fails. */
+  risk?: string;
 }
 
 export type SayKind = 'narration' | 'answer' | 'callback' | 'takeaway' | 'warning';
@@ -40,7 +69,8 @@ export type JournalEntry =
   | { id: string; at: string; kind: 'replay'; replayId: string; title: string; scenes: number }
   | { id: string; at: string; kind: 'step'; step: StepInfo }
   | { id: string; at: string; kind: 'pieces'; pieces: PieceView[] }
-  | { id: string; at: string; kind: 'check'; command: string; expected: string; passed: boolean; output?: string }
+  | { id: string; at: string; kind: 'check'; command: string; expected: string; passed: boolean; output?: string; evidence?: Place[]; risk?: string }
+  | { id: string; at: string; kind: 'explain'; where: string; why?: string; notice?: string; decisions: DecisionView[] }
   | { id: string; at: string; kind: 'summary'; summary: string; verified: string[]; notVerified: string[]; takeaway?: string }
   | { id: string; at: string; kind: 'open'; file: string; line?: number; why: string }
   | { id: string; at: string; kind: 'notice'; text: string; tone?: 'info' | 'error' };
@@ -65,6 +95,8 @@ export interface ActivePiece {
   kind: PieceKind;
   file: string;
   why: string;
+  notice?: string;
+  decision?: string;
   watching: boolean;
   diverged?: Divergence;
 }
@@ -115,6 +147,9 @@ export interface PanelState {
   active: ActivePiece | null;
   connection: Connection;
   readAloud: boolean;
+  /** Whether this computer has a voice to read aloud with; unknown until the extension has looked. */
+  speech: boolean | 'unknown';
+  activity: Activity | null;
   replay: ReplayView | null;
   replays: ReplaySummary[];
 }
@@ -125,8 +160,7 @@ export type PanelMeta = Omit<PanelState, 'journal'>;
 export type ToPanel =
   | { type: 'state'; state: PanelState }
   | { type: 'entry'; entry: JournalEntry }
-  | { type: 'meta'; meta: PanelMeta }
-  | { type: 'speak'; text: string };
+  | { type: 'meta'; meta: PanelMeta };
 
 export type PieceAction = 'fillIn' | 'skip' | 'keepMine' | 'showAgain' | 'takeOver';
 
@@ -141,6 +175,7 @@ export type FromPanel =
   | { type: 'ready' }
   | { type: 'setGear'; gear: Gear }
   | { type: 'ask'; text: string }
+  | { type: 'askMore'; where: string }
   | { type: 'piece'; action: PieceAction }
   | ({ type: 'replay' } & ReplayAction)
   | { type: 'openFile'; file: string; line?: number }

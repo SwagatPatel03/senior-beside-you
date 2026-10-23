@@ -252,6 +252,121 @@ test('a replay opens scene by scene, shows a change side by side, and waits for 
   assert.equal(missing.status, 400);
 });
 
+test('the activity line follows Claude Code, credits work during the user\'s turn to the navigator, and never takes questions', async () => {
+  const t0 = Date.now();
+  await call('activity', { state: 'working', label: 'Reading src/cart.js', at: t0 });
+  assert.deepEqual(api.session.activity, { state: 'working', label: 'Reading src/cart.js', since: t0 });
+  await call('activity', { state: 'thinking', at: t0 - 1000 });
+  assert.equal(api.session.activity.label, 'Reading src/cart.js', 'an older report that arrives late is ignored');
+
+  api.session.ask('Why cents?', 'src/cart.js:1');
+  await call('activity', { state: 'thinking', at: t0 + 1 });
+  assert.equal(api.session.activity.state, 'thinking');
+  const status = await call('status');
+  assert.equal(status.result.userQuestions?.[0]?.text, 'Why cents?', 'the question is still there for Claude');
+
+  // While the user types a guided piece, Claude Code is waiting for them: any work is the navigator's.
+  fs.writeFileSync(file('src/turn.js'), 'module.exports = {};\n');
+  const pending = call('guide', { pieces: [{ file: 'src/turn.js', kind: 'spine', where: 'start', text: 'const a = 1;', why: 'One.' }] });
+  await until(() => api.session.active, 'the piece');
+  await call('activity', { state: 'working', label: 'Reading src/next.js', at: t0 + 2 });
+  assert.deepEqual(api.session.activity, { state: 'working', label: 'Reading src/next.js', helper: true, since: t0 + 2 });
+  await call('activity', { state: 'thinking', at: t0 + 3 });
+  assert.equal(api.session.activity.label, 'Reading src/next.js', 'Claude Code itself is not thinking while it waits for the user');
+  await call('activity', { state: 'idle', helper: true, at: t0 + 4 });
+  assert.deepEqual(api.session.activity, { state: 'idle', helper: true, since: t0 + 4 });
+  await typeLikeAPerson('const a = 1;');
+  assert.equal((await pending).result.status, 'done');
+
+  const bad = await call('activity', { state: 'sleeping' });
+  assert.equal(bad.status, 400);
+});
+
+test('ending a step can open the next one in the same moment', async () => {
+  const before = api.session.snapshot().journal.length;
+  const next = { index: 2, total: 2, title: 'Tax in whole cents', why: 'Now the tax, rounded to whole cents.', expect: 'The tax test passes.', risk: 'Fractions of a cent.' };
+  const result = (await call('end_step', { summary: 'The total works.', verified: ['2 tests passed'], notVerified: [], takeaway: 'Count money in cents.', next })).result;
+  assert.equal(result.ok, true);
+  const added = api.session.snapshot().journal.slice(before);
+  assert.deepEqual(added.map((e) => e.kind), ['summary', 'step']);
+  assert.deepEqual(added[1].step, next);
+  assert.equal(api.session.step.title, 'Tax in whole cents');
+
+  const broken = await call('end_step', { summary: 'x', verified: [], notVerified: [], next: { index: 3, total: 3, why: 'No title.', expect: 'x' } });
+  assert.equal(broken.status, 400);
+  assert.equal(api.session.snapshot().journal.length, before + 2, 'a malformed next step leaves the journal as it was');
+});
+
+test('a failed check opens the line it points at and recalls the step\'s risk', async () => {
+  fs.writeFileSync(file('src/money.js'), 'function total(items) {\n  return items.length * 0.1;\n}\nmodule.exports = { total };\n');
+  await call('begin_step', { index: 1, total: 1, title: 'Totals in cents', why: 'Money is counted in whole cents.', expect: 'The total test passes.', risk: 'Floating point drifts by fractions of a cent.' });
+  const output = `AssertionError: 0.30000000000000004 !== 0.3\n    at total (${file('src/money.js')}:2:23)\n    at node:internal/test_runner:1:1`;
+  const result = (await call('show_check', { command: 'npm test', expected: 'The total test passes.', passed: false, output })).result;
+  assert.equal(result.openedForTheUser, 'src/money.js:2');
+  const check = api.session.snapshot().journal.filter((e) => e.kind === 'check').pop();
+  assert.deepEqual(check.evidence, [{ file: 'src/money.js', line: 2 }]);
+  assert.equal(check.risk, 'Floating point drifts by fractions of a cent.');
+  const editor = vscode.window.activeTextEditor;
+  assert.ok(editor.document.uri.fsPath.endsWith(path.join('src', 'money.js')));
+  assert.equal(editor.selection.active.line, 1);
+
+  const passed = (await call('show_check', { command: 'npm test', expected: 'It passes.', passed: true, output })).result;
+  assert.equal(passed.openedForTheUser, undefined, 'a check that went as expected opens nothing');
+});
+
+test('"why?" on a written line answers at once from its piece and the decision behind it', async () => {
+  const core = await import(require('node:url').pathToFileURL(path.resolve(__dirname, '../../../../plugin/core/index.mjs')).href);
+  const decision = core.addEntry(workspace, {
+    title: 'Money is kept in whole cents',
+    reversibility: 'one-way',
+    chosen: 'Integers of cents everywhere',
+    why: 'Floating point cannot hold 0.1 exactly.',
+    rejected: [{ option: 'Decimals in floats', why: 'They drift by fractions of a cent.' }],
+  });
+  fs.writeFileSync(file('src/price.js'), 'module.exports = {};\n');
+  const pending = call('guide', {
+    pieces: [{ file: 'src/price.js', kind: 'spine', where: 'start', text: 'const toCents = (euros) => Math.round(euros * 100);', why: 'Prices arrive in euros and leave in cents.', notice: 'Math.round, not Math.floor.', decision: decision.id }],
+  });
+  await until(() => api.session.active, 'the piece');
+  assert.equal(api.session.active.notice, 'Math.round, not Math.floor.');
+  await typeLikeAPerson('const toCents = (euros) => Math.round(euros * 100);');
+  assert.equal((await pending).result.status, 'done');
+
+  const editor = vscode.window.activeTextEditor;
+  editor.selection = new vscode.Selection(0, 5, 0, 5);
+  const before = api.session.snapshot().journal.length;
+  await vscode.commands.executeCommand('senior.askWhy');
+  const added = api.session.snapshot().journal.slice(before);
+  assert.equal(added.length, 1);
+  assert.equal(added[0].kind, 'explain');
+  assert.equal(added[0].why, 'Prices arrive in euros and leave in cents.');
+  assert.equal(added[0].notice, 'Math.round, not Math.floor.');
+  assert.deepEqual(added[0].decisions.map((d) => [d.id, d.title, d.rejected[0].option]), [[decision.id, 'Money is kept in whole cents', 'Decimals in floats']]);
+  assert.match(added[0].where, /^src\/price\.js:1: const toCents/);
+  assert.ok(!api.session.hasPendingQuestions(), 'nothing was sent to Claude Code');
+});
+
+test('the computer\'s own voice reads narration aloud, and the panel only offers it when there is one', async () => {
+  const available = await api.voice.ready;
+  await until(() => api.session.speech !== 'unknown', 'the voice check');
+  assert.equal(api.session.speech, available);
+  if (process.platform === 'win32' || process.platform === 'darwin') assert.equal(available, true);
+  if (!available) {
+    console.log('        This computer has no voice, so Read aloud is hidden.');
+    return;
+  }
+  // The test run sets the volume to zero on Windows, so nothing is heard. Turning Read aloud on warms
+  // the speaker, so a sentence then takes only as long as it takes to say.
+  await api.voice.warm();
+  const started = Date.now();
+  await api.voice.say('Then the tax.');
+  assert.equal(api.voice.lastError, null);
+  console.log(`        Spoke a short sentence in ${Date.now() - started} ms after warming up.`);
+  api.voice.stop();
+  await api.voice.say('This sentence starts the speaker again after a stop.');
+  assert.equal(api.voice.lastError, null);
+});
+
 exports.run = async function run() {
   const extension = vscode.extensions.getExtension('swagatpatel.senior');
   api = await extension.activate();

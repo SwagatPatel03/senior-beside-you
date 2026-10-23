@@ -34,6 +34,8 @@ export class ReplayController implements vscode.TextDocumentContentProvider, vsc
     private readonly session: SessionStore,
     private readonly workspaceRoot: () => string | null,
     private readonly reveal: () => void,
+    /** Reads a scene aloud when the user has turned reading aloud on. */
+    private readonly speak: (text: string) => void = () => undefined,
   ) {
     const watcher = vscode.workspace.createFileSystemWatcher('**/.senior/replays/*.json');
     this.disposables.push(
@@ -71,14 +73,23 @@ export class ReplayController implements vscode.TextDocumentContentProvider, vsc
     this.session.noteReplay(replay.id, replay.title, replay.scenes.length);
     this.publish();
     this.reveal();
+    this.speakScene();
   }
 
   /** Move to a scene. The page after the last scene closes the replay with what was skipped and checked. */
   go(index: number): void {
     const open = this.current;
     if (!open) return;
-    open.index = Math.max(0, Math.min(Math.trunc(index), open.replay.scenes.length));
+    const next = Math.max(0, Math.min(Math.trunc(index), open.replay.scenes.length));
+    if (next === open.index) return;
+    open.index = next;
     this.publish();
+    this.speakScene();
+  }
+
+  private speakScene(): void {
+    const scene = this.current?.replay.scenes[this.current.index];
+    if (scene) this.speak(`${scene.title}. ${scene.narration}`);
   }
 
   finish(): void {

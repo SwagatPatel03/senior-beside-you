@@ -1,6 +1,6 @@
 import { Fragment } from 'preact';
-import { useState } from 'preact/hooks';
-import type { ActivePiece, Gear, PanelState, Stats } from '../src/panel/protocol.ts';
+import { useEffect, useState } from 'preact/hooks';
+import type { ActivePiece, Activity, Gear, PanelState, Stats } from '../src/panel/protocol.ts';
 import { send } from './vscode.ts';
 
 const GEARS: { gear: Gear; label: string; hint: string }[] = [
@@ -26,6 +26,39 @@ function connectionLabel(state: PanelState): { text: string; live: boolean } {
   return { text: 'Waiting for Claude Code', live: false };
 }
 
+function duration(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`;
+}
+
+/** What Claude Code is doing right now, or null when there is nothing to show. */
+function activityLine(activity: Activity | null, now: number): string | null {
+  if (!activity || now - activity.since > 10 * 60_000) return null;
+  const time = now - activity.since >= 3000 ? ` · ${duration(now - activity.since)}` : '';
+  if (activity.helper) return activity.state === 'idle' ? 'The navigator has prepared the next step' : `Navigator · ${activity.label ?? 'thinking'}${time}`;
+  if (activity.state === 'idle') return null;
+  return `${activity.state === 'working' ? (activity.label ?? 'Working') : 'Thinking'}${time}`;
+}
+
+function ActivityLine({ activity }: { activity: Activity | null }) {
+  const [now, setNow] = useState(Date.now());
+  const busy = !!activity && activity.state !== 'idle';
+  useEffect(() => {
+    setNow(Date.now());
+    if (!busy) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [busy, activity?.since]);
+  const line = activityLine(activity, now);
+  if (!line) return null;
+  return (
+    <p class={`activity ${busy ? 'busy' : ''}`} role="status" title="What Claude Code is doing right now">
+      <span class="dot" aria-hidden="true" />
+      {line}
+    </p>
+  );
+}
+
 export function Header({ state }: { state: PanelState }) {
   const connection = connectionLabel(state);
   return (
@@ -40,11 +73,12 @@ export function Header({ state }: { state: PanelState }) {
           {connection.text}
         </span>
       </div>
+      <ActivityLine activity={state.activity} />
       {state.replay ? (
         <div class="step-line replay-line">
           <div class="replay-head">
             <span class="label">Replay</span>
-            <ReadAloud on={state.readAloud} />
+            {state.speech !== false && <ReadAloud on={state.readAloud} />}
             <button class="quiet-button close" title="Close the replay and go back to the session" onClick={() => send({ type: 'replay', action: 'close' })}>
               Close
             </button>
@@ -68,7 +102,7 @@ export function Header({ state }: { state: PanelState }) {
               {g.label}
             </button>
           ))}
-          <ReadAloud on={state.readAloud} />
+          {state.speech !== false && <ReadAloud on={state.readAloud} />}
         </div>
       )}
     </header>
@@ -192,6 +226,11 @@ export function ActiveBar({ active, gear }: { active: ActivePiece; gear: Gear })
         <span class="file">{active.file}</span>
       </div>
       <p class="active-why">{active.why}</p>
+      {active.notice && (
+        <p class="active-notice">
+          <span class="label">Notice</span> {active.notice}
+        </p>
+      )}
       {active.diverged ? (
         <div class="divergence">
           <p>Your line differs from the plan.</p>

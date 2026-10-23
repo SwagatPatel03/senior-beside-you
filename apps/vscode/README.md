@@ -8,13 +8,21 @@ Senior works with [Claude Code](https://claude.com/claude-code). Claude Code doe
 
 ## How a step feels
 
-1. Claude Code explains the next step in a sentence or two in the Senior panel.
+1. The senior introduces the step in a sentence or two the moment it starts. With **Read aloud** on, your computer's voice says it too.
 2. The routine parts, such as imports and error messages, appear in your file on their own.
-3. For the lines that matter, Senior shows the code as ghost text and you type it. The panel tells you why the piece exists while you write it.
+3. For the lines that matter, Senior shows the code as ghost text and you type it. The panel tells you why the piece exists while you write it, and what detail to notice in it.
 4. Claude Code runs the check it named before you started, and the panel shows whether the result was the one expected.
-5. The step ends with what was verified, what was not, and one takeaway worth remembering.
+5. The step ends with what was verified, what was not, and one takeaway worth remembering. The next step opens in the same moment.
 
-If you are curious about a line, put the cursor on it and press Ctrl+Alt+/ (Cmd+Alt+/ on a Mac). The answer appears in the panel, and the step carries on.
+## No waiting between steps
+
+You and Claude Code work like a human pair: you are the driver for the important lines, and Claude Code is the navigator who thinks ahead. While you type one step, a helper prepares the next one in the background, with its pieces and what the senior will say about them. When your check passes, the next step is already there.
+
+A quiet line under the Senior heading always shows what Claude Code is doing, such as reading a file, running the tests or thinking, and for how long. You are never left wondering whether anything is happening.
+
+## Asking why
+
+Put the cursor on any line and press Ctrl+Alt+/ (Cmd+Alt+/ on a Mac). If the line came from a guided piece or carries out a recorded decision, the answer appears at once: why the piece exists, what to notice, the decision behind it and the options that were turned down. **Ask more about this line** sends your own question to Claude Code, which answers in the panel and carries on where it was.
 
 ## Three gears
 
@@ -32,7 +40,7 @@ Senior notices when what you typed is different from the plan. It never overwrit
 
 ## When something fails
 
-Claude Code says what it expects before it runs a check. When a check fails, it says what it thinks went wrong, and it may ask you to type a short probe, such as a print statement, to test that guess. You see the reasoning, not only the fix.
+Claude Code says what it expects before it runs a check. When a check fails, Senior opens the line the failure points at, marks it, and reminds you of the risk the plan named for this step, while Claude Code is still thinking. You look at the same evidence as the senior. Then it says what it thinks went wrong, and it may ask you to type a short probe, such as a print statement, to test that guess. You see the hunt, not only the fix.
 
 ## The journal
 
@@ -85,7 +93,7 @@ If the feature has no plan yet, Claude Code starts with a short design session. 
 | --- | --- | --- |
 | `senior.gear` | `type` | How hands-on you want to be: `type`, `accept` or `watch`. |
 | `senior.watchSpeed` | `40` | Characters per second when Senior types in the watch gear. |
-| `senior.readAloud` | `false` | Reads the narration aloud with your system voice. |
+| `senior.readAloud` | `false` | Reads the narration aloud with your computer's own voice: the built-in speech on Windows, `say` on macOS, and `spd-say` or `espeak` on Linux. |
 
 The colours of the slot you are writing in, the hints and the highlights follow your theme. You can change them in `workbench.colorCustomizations` with the `senior.*` colour ids.
 
@@ -100,6 +108,7 @@ The colours of the slot you are writing in, the hints and the highlights follow 
 - **The panel says "Waiting for Claude Code".** Claude Code must run in the window's folder or in a folder inside it. Run `claude plugin list` to check that the senior plugin is installed and enabled.
 - **The ghost text does not appear.** Check that `editor.inlineSuggest.enabled` is on. Other extensions that show inline suggestions, such as GitHub Copilot, can take the place of Senior's ghost text, so pause them while you pair.
 - **Several VS Code windows are open.** Senior connects Claude Code to the window whose folder contains the folder Claude Code is working in.
+- **There is no Read aloud switch.** Senior found no voice on this computer. On Linux, install `speech-dispatcher` (for `spd-say`) or `espeak`, then reload the window.
 
 ## License
 

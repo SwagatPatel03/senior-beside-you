@@ -1,3 +1,4 @@
+import { Fragment } from 'preact';
 import type { JournalEntry, PieceView } from '../src/panel/protocol.ts';
 import { send } from './vscode.ts';
 
@@ -15,6 +16,11 @@ const PIECE_STATUS: Record<PieceView['status'], { glyph: string; label: string }
 
 // What each kind of piece is called in the panel: the user's to write, Senior's, or a probe.
 const KIND_LABEL: Record<PieceView['kind'], string> = { spine: 'Yours', flesh: "Senior's", probe: 'Probe' };
+
+/** Lower-case the first letter so a stored sentence can continue another, unless it starts with a name such as SQL. */
+function lowerFirst(text: string): string {
+  return /^[A-Z](?:[a-z]|\s)/.test(text) ? text[0].toLowerCase() + text.slice(1) : text;
+}
 
 function FileLink({ file, line }: { file: string; line?: number }) {
   return (
@@ -111,6 +117,22 @@ export function Entry({ entry }: { entry: JournalEntry }) {
           </div>
           <code class="command">{entry.command}</code>
           <p class="expect">Expected: {entry.expected}</p>
+          {entry.evidence && entry.evidence.length > 0 && (
+            <p class="evidence">
+              <span class="label">It points at</span>{' '}
+              {entry.evidence.map((place, i) => (
+                <Fragment key={`${place.file}:${place.line}`}>
+                  {i > 0 && ', '}
+                  <FileLink file={place.file} line={place.line} />
+                </Fragment>
+              ))}
+            </p>
+          )}
+          {entry.risk && (
+            <p class="evidence">
+              <span class="label">The risk named for this step</span> {entry.risk}
+            </p>
+          )}
           {entry.output && (
             <details>
               <summary>Output</summary>
@@ -118,6 +140,37 @@ export function Entry({ entry }: { entry: JournalEntry }) {
             </details>
           )}
         </section>
+      );
+    case 'explain':
+      return (
+        <article class="said explain">
+          <span class="label">About this line</span>
+          <code class="where">{entry.where}</code>
+          {entry.why && <p>{entry.why}</p>}
+          {entry.notice && (
+            <p class="notice-line">
+              <span class="label">Notice</span> {entry.notice}
+            </p>
+          )}
+          {entry.decisions.map((d) => (
+            <div class="decision" key={d.id}>
+              <p class="decision-title">
+                <code>{d.id}</code> {d.title}
+              </p>
+              <p>
+                We chose {lowerFirst(d.chosen)}. {d.why}
+              </p>
+              {d.rejected.map((r) => (
+                <p class="rejected" key={r.option}>
+                  Not {lowerFirst(r.option)}: {lowerFirst(r.why)}
+                </p>
+              ))}
+            </div>
+          ))}
+          <button class="link ask-more" onClick={() => send({ type: 'askMore', where: entry.where })}>
+            Ask more about this line
+          </button>
+        </article>
       );
     case 'summary':
       return (

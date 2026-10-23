@@ -28,13 +28,6 @@ function reduce(state: PanelState | null, action: Action): PanelState | null {
   }
 }
 
-function speak(text: string): void {
-  if (!('speechSynthesis' in window)) return;
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 1;
-  window.speechSynthesis.speak(utterance);
-}
-
 function App() {
   const [state, dispatch] = useReducer(reduce, null);
   const journalRef = useRef<HTMLDivElement>(null);
@@ -42,10 +35,7 @@ function App() {
   const stick = useRef(true);
 
   useEffect(() => {
-    const onMessage = (event: MessageEvent<ToPanel>) => {
-      if (event.data.type === 'speak') speak(event.data.text);
-      else dispatch(event.data);
-    };
+    const onMessage = (event: MessageEvent<ToPanel>) => dispatch(event.data);
     window.addEventListener('message', onMessage);
     send({ type: 'ready' });
     return () => window.removeEventListener('message', onMessage);
@@ -59,15 +49,9 @@ function App() {
     if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [state?.journal, replay === null]);
 
-  // In a replay, each scene starts at the top, can be read aloud, and the arrow keys turn the pages.
+  // In a replay, each scene starts at the top, and the arrow keys turn the pages.
   useEffect(() => {
-    if (!replay) return;
-    sceneRef.current?.scrollTo(0, 0);
-    const scene = replay.scenes[replay.index];
-    if (scene && state?.readAloud) {
-      window.speechSynthesis?.cancel();
-      speak(`${scene.title}. ${scene.narration}`);
-    }
+    if (replay) sceneRef.current?.scrollTo(0, 0);
   }, [replay?.id, replay?.index]);
 
   useEffect(() => {

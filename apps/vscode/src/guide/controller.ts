@@ -105,10 +105,15 @@ export class GuideController implements vscode.Disposable {
     };
   }
 
+  markEvidence(editor: vscode.TextEditor, line: number): void {
+    this.decorations.markEvidence(editor, line);
+  }
+
   /** Start guiding a list of pieces. A call with the same pieces as the running guide just keeps waiting. */
   start(pieces: Piece[]): void {
     const problems = this.check(pieces);
     if (problems.length) throw new Error(problems.join(' '));
+    this.decorations.clearEvidence();
     if (this.run?.state === 'running') {
       if (JSON.stringify(this.run.pieces) === JSON.stringify(pieces)) return;
       this.cancelRun('Replaced by a new set of pieces.');
@@ -121,6 +126,8 @@ export class GuideController implements vscode.Disposable {
       lines: writtenLineCount(p.text),
       status: 'waiting',
       ...(p.expect ? { expect: p.expect } : {}),
+      ...(p.notice ? { notice: p.notice } : {}),
+      ...(p.decision ? { decision: p.decision } : {}),
     }));
     const entry = this.session.add({ kind: 'pieces', pieces: views });
     const run: Run = { pieces, results: [], index: 0, state: 'running', entryId: entry.id, views, touched: new Set() };
@@ -270,7 +277,16 @@ export class GuideController implements vscode.Disposable {
       watched: false,
     };
     this.slot = slot;
-    this.session.active = { index, total: run.pieces.length, kind: piece.kind, file: piece.file, why: piece.why, watching: false };
+    this.session.active = {
+      index,
+      total: run.pieces.length,
+      kind: piece.kind,
+      file: piece.file,
+      why: piece.why,
+      ...(piece.notice ? { notice: piece.notice } : {}),
+      ...(piece.decision ? { decision: piece.decision } : {}),
+      watching: false,
+    };
     this.session.changed();
     this.placeCursor(slot);
     this.render();
@@ -284,6 +300,7 @@ export class GuideController implements vscode.Disposable {
 
   private async finish(slot: Slot, status: PieceOutcome, text?: string): Promise<void> {
     if (this.slot !== slot) return;
+    this.remember(slot.piece, text);
     this.clearSlot();
     this.session.active = null;
     this.session.changed();
@@ -563,6 +580,37 @@ export class GuideController implements vscode.Disposable {
   private setView(run: Run, index: number, status: PieceView['status'], detail?: string): void {
     run.views[index] = { ...run.views[index], status, ...(detail ? { detail } : {}) };
     this.session.update({ id: run.entryId, at: new Date().toISOString(), kind: 'pieces', pieces: [...run.views] });
+  }
+
+  /** Pieces guided in this session, newest last, so "why?" on a line can be answered from them. */
+  private readonly written: { file: string; lines: Set<string>; piece: Piece }[] = [];
+
+  private remember(piece: Piece, text?: string): void {
+    const lines = new Set(`${piece.text}\n${text ?? ''}`.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 2));
+    this.written.push({ file: piece.file, lines, piece });
+    if (this.written.length > 200) this.written.shift();
+  }
+
+  /**
+   * The piece a line of a file came from: the piece being written when the line is inside its slot,
+   * otherwise the latest guided piece of that file containing the same text.
+   */
+  pieceAt(document: vscode.TextDocument, line: number): Piece | null {
+    const slot = this.slot;
+    if (slot && document === slot.doc) {
+      const first = slot.doc.positionAt(slot.start).line;
+      const last = slot.doc.positionAt(slot.end).line;
+      if (line >= first && line <= last) return slot.piece;
+    }
+    const root = this.workspaceRoot();
+    const file = root ? path.relative(root, document.uri.fsPath).replace(/\\/g, '/') : '';
+    const text = document.lineAt(line).text.trim();
+    if (!file || text.length <= 2) return null;
+    for (let i = this.written.length - 1; i >= 0; i--) {
+      const w = this.written[i];
+      if (w.file === file && w.lines.has(text)) return w.piece;
+    }
+    return null;
   }
 
   private wake(): void {

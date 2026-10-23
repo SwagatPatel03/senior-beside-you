@@ -2,7 +2,7 @@
 
 import * as vscode from 'vscode';
 import { appendEvent, findRoot } from '../../../plugin/core/index.mjs';
-import type { ActivePiece, Connection, Gear, JournalEntry, PanelMeta, PanelState, ReplayPlace, ReplaySummary, ReplayView, SayKind, Stats, StepInfo } from './panel/protocol.ts';
+import type { ActivePiece, Activity, Connection, Gear, JournalEntry, PanelMeta, PanelState, ReplayPlace, ReplaySummary, ReplayView, SayKind, Stats, StepInfo } from './panel/protocol.ts';
 
 const MAX_JOURNAL = 300;
 
@@ -29,6 +29,27 @@ export class SessionStore implements vscode.Disposable {
   /** The replay open in the panel, and the saved replays of this project. Set by the replay controller. */
   replay: ReplayView | null = null;
   replays: ReplaySummary[] = [];
+  /** Whether the panel can read aloud. It reports this once it has looked for a voice. */
+  speech: boolean | 'unknown' = 'unknown';
+  activity: Activity | null = null;
+  private activityAt = 0;
+
+  /**
+   * What Claude Code is doing, from the plugin's activity hook. Reports arrive in the background and
+   * can overtake each other, so an older report never replaces a newer one. While the user is typing
+   * a guided piece, Claude Code itself is waiting for them, so any work belongs to a helper.
+   */
+  setActivity(report: { state: Activity['state']; label?: string; helper?: boolean; at: number }, helping: boolean): void {
+    if (report.at < this.activityAt) return;
+    this.activityAt = report.at;
+    // While the user types, only the helper's own work and its finishing are news.
+    if (helping && report.state !== 'working' && !report.helper) return;
+    const helper = report.helper || helping;
+    const same = this.activity && this.activity.state === report.state && this.activity.label === report.label && !!this.activity.helper === helper;
+    if (same) return;
+    this.activity = { state: report.state, ...(report.label ? { label: report.label } : {}), ...(helper ? { helper: true } : {}), since: report.at };
+    this.changed();
+  }
 
   private readonly entryEmitter = new vscode.EventEmitter<JournalEntry>();
   private readonly metaEmitter = new vscode.EventEmitter<void>();
@@ -83,6 +104,8 @@ export class SessionStore implements vscode.Disposable {
       active: this.active,
       connection: this.connection(),
       readAloud: this.readAloud,
+      speech: this.speech,
+      activity: this.activity,
       replay: this.replay,
       replays: this.replays,
     };

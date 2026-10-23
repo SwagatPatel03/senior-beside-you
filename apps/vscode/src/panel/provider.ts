@@ -18,13 +18,22 @@ export class PanelProvider implements vscode.WebviewViewProvider, vscode.Disposa
     private readonly extensionUri: vscode.Uri,
     private readonly session: SessionStore,
     private readonly onMessage: (message: FromPanel) => void,
+    /** Reads text aloud with the computer's voice. Called only when the user has turned reading aloud on. */
+    private readonly say: (text: string) => void,
   ) {
     this.subscriptions.push(
       session.onEntry((entry) => {
         this.post({ type: 'entry', entry });
-        if (this.session.readAloud && SPOKEN.has(entry.kind) && 'text' in entry) this.post({ type: 'speak', text: entry.text });
+        if (!this.session.readAloud) return;
+        // The narration was prepared ahead, so it can be spoken the moment its step or piece starts.
+        if (entry.kind === 'step') this.speak(`${entry.step.title}. ${entry.step.why}`);
+        else if (entry.kind === 'explain' && entry.why) this.speak(entry.why);
+        else if (SPOKEN.has(entry.kind) && 'text' in entry) this.speak(entry.text);
       }),
-      session.onMeta(() => this.queueMeta()),
+      session.onMeta(() => {
+        this.queueMeta();
+        this.speakActivePiece();
+      }),
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (e.affectsConfiguration('senior')) this.queueMeta();
       }),
@@ -47,6 +56,21 @@ export class PanelProvider implements vscode.WebviewViewProvider, vscode.Disposa
 
   reveal(): void {
     this.view?.show?.(true);
+  }
+
+  private spokenPiece = '';
+
+  /** Read out why a piece the user is about to write exists, once, as it becomes their turn. */
+  private speakActivePiece(): void {
+    const active = this.session.active;
+    const key = active ? `${active.index}/${active.total}/${active.file}/${active.why}` : '';
+    if (key === this.spokenPiece) return;
+    this.spokenPiece = key;
+    if (active && active.kind !== 'flesh' && this.session.readAloud) this.speak(active.notice ? `${active.why} ${active.notice}` : active.why);
+  }
+
+  private speak(text: string): void {
+    this.say(text);
   }
 
   private queueMeta(): void {

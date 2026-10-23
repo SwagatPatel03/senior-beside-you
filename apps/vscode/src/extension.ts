@@ -2,18 +2,19 @@
 
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { setSeedDir } from '../../../plugin/core/index.mjs';
+import { activeEntries, entriesTouching, findRoot, setSeedDir } from '../../../plugin/core/index.mjs';
 import { BridgeHandlers } from './bridge/handlers.ts';
 import { BridgeServer } from './bridge/server.ts';
 import { GuideController } from './guide/controller.ts';
 import { Decorations } from './guide/decorations.ts';
 import { GhostTextProvider } from './guide/inline.ts';
-import type { FromPanel, Gear } from './panel/protocol.ts';
+import type { DecisionView, FromPanel, Gear, JournalEntry } from './panel/protocol.ts';
 import { PanelProvider } from './panel/provider.ts';
 import { REPLAY_SCHEME, ReplayController } from './replay/controller.ts';
 import { SessionStore } from './session.ts';
 import { detect, installPlugin } from './setup.ts';
 import { StatusItem } from './status.ts';
+import { Voice } from './voice.ts';
 
 const GEARS: Gear[] = ['type', 'accept', 'watch'];
 
@@ -21,6 +22,7 @@ export interface SeniorApi {
   session: SessionStore;
   guide: GuideController;
   replays: ReplayController;
+  voice: Voice;
   bridge: { port: number; token: string };
 }
 
@@ -40,14 +42,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
   };
 
   const session = new SessionStore(context.globalState, root);
+  const voice = new Voice();
+  const readAloud = (text: string) => {
+    if (session.readAloud) void voice.say(text);
+  };
   const decorations = new Decorations();
   const guide = new GuideController(session, decorations, root);
-  const replays = new ReplayController(session, root, () => panel.reveal());
+  const replays = new ReplayController(session, root, () => panel.reveal(), readAloud);
   const handlers = new BridgeHandlers(session, guide, replays, root, (dir) => {
     if (dir) projectDir = dir;
   });
   const bridge = new BridgeServer(handlers.handle, context.extension.packageJSON.version as string, log);
-  const panel = new PanelProvider(context.extensionUri, session, (message) => void onPanel(message));
+  const panel = new PanelProvider(context.extensionUri, session, (message) => void onPanel(message), readAloud);
+  void voice.ready.then((available) => {
+    session.speech = available;
+    session.changed();
+    if (available && session.readAloud) void voice.warm();
+  });
   const status = new StatusItem(session);
 
   async function watchReplay(id?: string): Promise<void> {
@@ -72,20 +83,54 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
     }
   }
 
-  async function askWhy(prefill?: string): Promise<void> {
+  function whereIn(editor: vscode.TextEditor): string {
+    const r = root();
+    const file = r ? path.relative(r, editor.document.uri.fsPath).replace(/\\/g, '/') : editor.document.fileName;
+    const line = editor.selection.active.line;
+    const code = editor.selection.isEmpty ? editor.document.lineAt(line).text.trim() : editor.document.getText(editor.selection).trim();
+    return `${file}:${line + 1}${code ? `: ${code.slice(0, 300)}` : ''}`;
+  }
+
+  async function askWhy(prefill?: string, about?: string): Promise<void> {
     const editor = vscode.window.activeTextEditor;
-    let where: string | undefined;
-    if (editor) {
-      const r = root();
-      const file = r ? path.relative(r, editor.document.uri.fsPath).replace(/\\/g, '/') : editor.document.fileName;
-      const line = editor.selection.active.line;
-      const code = editor.selection.isEmpty ? editor.document.lineAt(line).text.trim() : editor.document.getText(editor.selection).trim();
-      where = `${file}:${line + 1}${code ? `: ${code.slice(0, 300)}` : ''}`;
-    }
+    const where = about ?? (editor ? whereIn(editor) : undefined);
     const question = prefill ?? (await vscode.window.showInputBox({ title: 'Ask Senior why', prompt: where ? `About ${where}` : undefined, value: 'Why ', valueSelection: [4, 4] }));
     if (!question?.trim()) return;
     session.ask(question.trim(), where);
     panel.reveal();
+  }
+
+  /**
+   * "Why is this line here?" First, at once, what is already known: the guided piece the line came
+   * from and the decisions behind it. Only when nothing is known does the question go to Claude Code;
+   * from the answer shown, the user can still ask more.
+   */
+  async function whyThisLine(): Promise<void> {
+    const editor = vscode.window.activeTextEditor;
+    const known = editor ? explain(editor) : null;
+    if (!editor || !known) return askWhy();
+    session.add({ kind: 'explain', where: whereIn(editor), ...known });
+    panel.reveal();
+  }
+
+  function explain(editor: vscode.TextEditor): Omit<Extract<JournalEntry, { kind: 'explain' }>, 'id' | 'at' | 'kind' | 'where'> | null {
+    const line = editor.selection.active.line;
+    const piece = guide.pieceAt(editor.document, line);
+    const folder = root();
+    const project = folder ? findRoot(folder) : null;
+    const decisions: DecisionView[] = [];
+    if (project) {
+      const ledger = activeEntries(project);
+      const rel = path.relative(project, editor.document.uri.fsPath).replace(/\\/g, '/');
+      const ids = new Set<string>(piece?.decision ? [piece.decision] : []);
+      for (const hit of entriesTouching(ledger, { files: [rel], text: editor.document.lineAt(line).text })) ids.add(hit.entry.id);
+      for (const id of [...ids].slice(0, 3)) {
+        const d = ledger.find((e) => e.id.toLowerCase() === id.toLowerCase());
+        if (d) decisions.push({ id: d.id, title: d.title, chosen: d.chosen, why: d.why, rejected: d.rejected.slice(0, 3) });
+      }
+    }
+    if (!piece && !decisions.length) return null;
+    return { ...(piece ? { why: piece.why } : {}), ...(piece?.notice ? { notice: piece.notice } : {}), decisions };
   }
 
   async function onPanel(message: FromPanel): Promise<void> {
@@ -100,6 +145,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
         else await askWhy(message.text);
         break;
       }
+      case 'askMore':
+        await askWhy(undefined, message.where);
+        break;
       case 'piece':
         await guide.action(message.action);
         break;
@@ -126,9 +174,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
         await vscode.env.clipboard.writeText(message.text);
         void vscode.window.setStatusBarMessage('Copied', 2000);
         break;
-      case 'toggleReadAloud':
-        await vscode.workspace.getConfiguration('senior').update('readAloud', !session.readAloud, vscode.ConfigurationTarget.Global);
+      case 'toggleReadAloud': {
+        const on = !session.readAloud;
+        if (on) void voice.warm();
+        else voice.stop();
+        await vscode.workspace.getConfiguration('senior').update('readAloud', on, vscode.ConfigurationTarget.Global);
         break;
+      }
     }
   }
 
@@ -142,6 +194,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
   context.subscriptions.push(
     log,
     session,
+    voice,
     decorations,
     guide,
     replays,
@@ -153,7 +206,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
     vscode.commands.registerCommand('senior.watchReplay', () => watchReplay()),
     // Guided pieces live in project files on disk, in any language.
     vscode.languages.registerInlineCompletionItemProvider({ scheme: 'file' }, new GhostTextProvider(guide)),
-    vscode.commands.registerCommand('senior.askWhy', () => askWhy()),
+    vscode.commands.registerCommand('senior.askWhy', () => whyThisLine()),
     vscode.commands.registerCommand('senior.cycleGear', () => session.setGear(GEARS[(GEARS.indexOf(session.gear) + 1) % GEARS.length])),
     vscode.commands.registerCommand('senior.gearType', () => session.setGear('type')),
     vscode.commands.registerCommand('senior.gearAccept', () => session.setGear('accept')),
@@ -178,7 +231,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
   }
   void refreshSetup();
 
-  return { session, guide, replays, bridge: bridge.address };
+  return { session, guide, replays, voice, bridge: bridge.address };
 }
 
 export function deactivate(): void {

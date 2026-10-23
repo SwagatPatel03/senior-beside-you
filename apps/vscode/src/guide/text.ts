@@ -11,6 +11,10 @@ export interface Piece {
   anchor?: string;
   text: string;
   why: string;
+  /** Spine pieces: the one detail worth noticing while typing it. */
+  notice?: string;
+  /** The ledger decision this piece carries out. */
+  decision?: string;
   expect?: string;
 }
 

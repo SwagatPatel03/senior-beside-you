@@ -30,7 +30,8 @@ const ideDir = path.join(base, 'ide');
 fs.mkdirSync(path.join(workspace, 'src'), { recursive: true });
 fs.mkdirSync(path.join(workspace, '.senior', 'sessions'), { recursive: true });
 
-const env = { SENIOR_IDE_DIR: ideDir, SENIOR_TEST_WORKSPACE: workspace };
+// The voice test speaks real sentences; on Windows they are spoken at zero volume.
+const env = { SENIOR_IDE_DIR: ideDir, SENIOR_TEST_WORKSPACE: workspace, SENIOR_VOICE_VOLUME: '0' };
 
 if (e2e) {
   const write = (rel, text) => {
@@ -40,7 +41,7 @@ if (e2e) {
   write('package.json', `${JSON.stringify({ name: 'cart', private: true, scripts: { test: 'node --test' } }, null, 2)}\n`);
   write('src/cart.js', "'use strict';\n\nmodule.exports = {};\n");
   write(
-    'test/cart.test.js',
+    'test/total.test.js',
     [
       "'use strict';",
       "const assert = require('node:assert/strict');",
@@ -58,6 +59,20 @@ if (e2e) {
     ].join('\n'),
   );
   write(
+    'test/tax.test.js',
+    [
+      "'use strict';",
+      "const assert = require('node:assert/strict');",
+      "const { test } = require('node:test');",
+      "const { withTax } = require('../src/cart.js');",
+      '',
+      "test('tax is added and the result stays in whole cents', () => {",
+      '  assert.equal(withTax([{ priceCents: 999 }], 7), 1069);',
+      '});',
+      '',
+    ].join('\n'),
+  );
+  write(
     '.senior/features/cart-total.plan.json',
     `${JSON.stringify(
       {
@@ -65,16 +80,26 @@ if (e2e) {
         title: 'Cart total',
         goal: 'The cart can say what it costs, in whole cents.',
         decisions: [],
-        examples: ['Two items at 250 and 199 cents cost 449 cents.', 'An empty cart costs 0.'],
+        examples: ['Two items at 250 and 199 cents cost 449 cents.', 'An empty cart costs 0.', 'One item at 999 cents with 7% tax costs 1069 cents.'],
         steps: [
           {
             id: 'S1',
             title: 'Add the cart total',
             why: 'Checkout needs one trusted number to charge.',
-            expect: 'Both tests in test/cart.test.js pass.',
+            expect: 'Both tests in test/total.test.js pass.',
             risk: 'Prices stored as floating point drift by fractions of a cent.',
             files: ['src/cart.js'],
-            check: 'npm test',
+            check: 'node --test test/total.test.js',
+            status: 'pending',
+          },
+          {
+            id: 'S2',
+            title: 'Add tax in whole cents',
+            why: 'The amount charged must be a whole number of cents, or the payment provider rejects it.',
+            expect: 'The test in test/tax.test.js passes.',
+            risk: 'Multiplying by 1.07 gives fractions of a cent.',
+            files: ['src/cart.js'],
+            check: 'node --test test/tax.test.js',
             status: 'pending',
           },
         ],

@@ -77,6 +77,8 @@ const SAMPLE = {
   gear: 'type',
   workspace: '/projects/gym',
   readAloud: false,
+  speech: true,
+  activity: { state: 'working', label: 'Reading src/bookings/errors.py', helper: true, since: Date.now() - 7000 },
   replay: null,
   replays: [
     { id: '2026-10-22-retry-the-payment-call-safely-k2x9', title: 'Retry the payment call safely', createdAt: new Date().toISOString(), scenes: 4 },
@@ -84,7 +86,7 @@ const SAMPLE = {
   step: { index: 2, total: 5, title: 'Make a booking atomic', why: 'Two members can tap Book on the last place at the same moment.', expect: 'The race test passes.', feature: 'gym-bookings' },
   stats: { typed: 14, accepted: 3, watched: 0, filled: 31, steps: 1, takeaways: 1 },
   connection: { lastCallSecondsAgo: 4, claudeFound: true, pluginInstalled: true },
-  active: { index: 1, total: 3, kind: 'spine', file: 'src/bookings/service.py', why: 'The database, not our code, decides who gets the last place.', watching: false },
+  active: { index: 1, total: 3, kind: 'spine', file: 'src/bookings/service.py', why: 'The database, not our code, decides who gets the last place.', notice: 'There is no capacity check before the insert; the index is the check.', decision: 'D-001', watching: false },
   journal: [
     { id: 'e1', at: at(9), kind: 'summary', summary: 'The examples are now tests, and all three fail because booking does not exist yet.', verified: ['pytest: 3 failed, as expected'], notVerified: [], takeaway: 'A failing test is the cheapest way to say what done means.' },
     { id: 'e2', at: at(8), kind: 'step', step: { index: 2, total: 5, title: 'Make a booking atomic', why: 'Two members can tap Book on the last place at the same moment. The database has to be the one that says no.', expect: 'The race test passes.' } },
@@ -97,8 +99,17 @@ const SAMPLE = {
     { id: 'e5', at: at(5), kind: 'question', text: 'Why not check if the slot is free first?', where: 'src/bookings/service.py:14: def book(member, slot):', answered: true },
     { id: 'e6', at: at(5), kind: 'answer', text: 'Because two requests can both see the slot as free before either one saves. The unique index means the second insert fails, whatever order they arrive in.', replyTo: 'e5' },
     { id: 'e7', at: at(3), kind: 'callback', text: 'On day one we chose a unique index for confirmed bookings (D-001). This line is where that choice does its work.' },
-    { id: 'e8', at: at(2), kind: 'check', command: 'pytest tests/test_bookings.py -k race', expected: 'One booking succeeds and the other is told the slot is taken.', passed: false, output: 'FAILED tests/test_bookings.py::test_last_place_race\nAssertionError: 2 bookings for slot 9' },
+    { id: 'e8', at: at(2), kind: 'check', command: 'pytest tests/test_bookings.py -k race', expected: 'One booking succeeds and the other is told the slot is taken.', passed: false, output: 'FAILED tests/test_bookings.py::test_last_place_race\nAssertionError: 2 bookings for slot 9', evidence: [{ file: 'src/bookings/service.py', line: 18 }, { file: 'tests/test_bookings.py', line: 41 }], risk: 'A check-then-insert lets two members take the last place.' },
     { id: 'e9', at: at(1), kind: 'narration', text: 'That is the race. My guess: the insert and the capacity check are two statements, so both requests pass the check. Let us look at what each request saw.' },
+    {
+      id: 'e10',
+      at: at(0),
+      kind: 'explain',
+      where: 'src/bookings/service.py:16: return bookings.insert(member, slot)',
+      why: 'The database, not our code, decides who gets the last place.',
+      notice: 'There is no capacity check before the insert; the index is the check.',
+      decisions: [{ id: 'D-001', title: 'Bookings are atomic', chosen: 'A unique index on confirmed bookings per slot', why: 'The database sees every request at once.', rejected: [{ option: 'Check if the slot is free, then insert', why: 'Two requests can pass the check at the same moment.' }] }],
+    },
   ],
 };
 

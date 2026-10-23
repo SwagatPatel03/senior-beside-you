@@ -197,6 +197,15 @@
         }
       },
       {
+        "id": "senior.evidenceBackground",
+        "description": "The line a failing check points at.",
+        "defaults": {
+          "dark": "#B980781F",
+          "light": "#8A4A4414",
+          "highContrast": "#00000000"
+        }
+      },
+      {
         "id": "senior.hintForeground",
         "description": "Hints shown at the end of the line you are writing.",
         "defaults": {
