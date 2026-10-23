@@ -8,7 +8,7 @@ This is the design document the project is built from. The code follows its buil
 
 The feeling of a senior beside you is buildable, but not as a plugin that changes how one agent talks. It needs a different way of producing code: a fast model that talks while a strong model decides, and code that appears in your editor for you to write, not in files the agent writes for you.
 
-- Four architectures, from cheapest to most complete: **A** senior mode on your existing agent, **D** shadow senior with replays, **B** two brains (planner and fast narrator), **C** ghost pair in the editor.
+- Four architectures, from cheapest to most complete: **A** senior mode on your existing agent, **D** shadow senior with replays, **B** two brains (a planner, and a navigator who prepares the next step while you type), **C** ghost pair in the editor.
 - Recommended: C as the face, B as the engine, D as the fast lane for deadline days. C is the only design where you write the important lines yourself, which is what lets you explain them later.
 - Shared underneath: a decision ledger, a regret library of failures other people already learned from, narration rules, consequence callbacks, repo onboarding and a project story.
 - No big mistakes: destructive actions are made impossible by the sandbox, and known security holes and false "done" claims are caught by mechanical checks before they land. Hard-to-undo architecture choices get an independent second review. Zero mistakes cannot be promised; mistakes reaching you can be made rare.
@@ -61,15 +61,20 @@ Change how Claude Code or Codex behaves, without building a new app. It fixes de
 
 Delivers F2, F6 partly, F7 and F8 well. F1, F3, F4 and F5 poorly. H1 and H2 stay unsolved, because the agent's loop is unchanged. Interrupting mid-burst (H6) still derails the turn. The hooks only link files to decisions, which is mechanical and reliable. Effort: days.
 
-## Architecture B: two brains, a planner and a fast narrator
+## Architecture B: two brains, a planner and a navigator who thinks while you type
+
+The first version of B paired a strong planner with a fast narrator: a second model that talked while the planner thought, streaming its words into the editor. That needed its own engine and a paid API key on top of the agent the user already has, and two of its risks were the narrator drifting from the plan and narration turning into noise. Most of what a narrator says is predictable from the plan, so this version prepares it instead of making it up live, and it uses the time the user spends typing for the thinking.
+
+In pair programming the driver types and the navigator thinks ahead. The user is the driver for the spine; the agent is the navigator.
 
 1. **The planner decides up front.** A strong model runs the design session and writes a plan file: the architecture, the risks, and an ordered list of small steps. The plan changes only through an announced decision.
-2. **The narrator drives in real time.** A fast model takes one step at a time, says what it is about to do, writes code in small pieces, runs it and reports, streaming words as they are generated.
-3. **The planner thinks ahead in the background**, reviewing the next steps against what has been built.
-4. **Escalation is visible.** When a test fails twice, an error surprises the narrator, or you ask a design question, the narrator hands over and the planner's reasoning appears as thinking out loud (H7).
-5. **An interrupt controller holds the state** (plan, current step, half-written change). On "why?" it pauses, answers from the plan and ledger, then resumes at the same line (H6).
+2. **Narration is written ahead, not made up live.** When a step is prepared, the planner also writes what the senior will say: the step's introduction, why each piece exists, what to notice in it, the risk it guards against, and which decision a line carries out. The editor plays it at the moment it is needed, on screen and, if the user wants, aloud. The senior starts talking within a second without a second model, and prepared narration cannot drift from the plan (H1, H5).
+3. **The navigator thinks while you type.** While the user types the spine of one step, a helper prepares the next one in the background: it reads the files, writes the pieces and their narration, and checks them against the ledger and the regret library. When the step's check passes, the next step is ready. The agent's thinking time overlaps the user's typing time, so neither waits for the other (H1, H3).
+4. **"Why?" is answered at once, then in depth.** The hotkey first shows what is already known about the line: the reason for its piece and the decision behind it, with what was rejected. A further question goes to the planner, which answers at its next pause and resumes at the same piece (H5, H6).
+5. **Surprises are shown, not hidden.** When a check fails, the editor opens the code the failure points at and recalls the risk named for the step while the planner thinks. The user looks at the same evidence as the senior, then hears its guess, the probe it wants, and the fix (H7). Nothing is asked of the user, so it is not a quiz.
+6. **The work is never silent.** A live line shows what the agent is doing (reading a file, running the tests, thinking) and for how long, so the few moments that cannot be prepared are still visible.
 
-Delivers F1, F3, F5 well, F2 through the planner, F7 and F8 through the ledger, F4 only partly. Risks: narrator drift, model disagreement (the planner always wins), office access (H9), cost (H13). Effort: weeks, on the Claude Agent SDK.
+Delivers F1, F3, F5 well, F2 through the planner, F7 and F8 through the ledger, F4 with C. It runs on the agent the user already has, with no extra key (H9), and costs more of the user's agent usage instead of a separate bill (H13). Risks: the navigator finishing late (the planner then prepares the step itself, so it is never slower than without a navigator), prepared steps going stale when the user keeps their own version of a line (anchors are checked again before use), and the first step of a session, which cannot be prepared ahead. Effort: days to weeks, as skills, a subagent and hooks on Claude Code.
 
 ## Architecture C: ghost pair in the editor
 
@@ -123,7 +128,7 @@ Every check that can be mechanical is mechanical, and the model reviews only wha
 Build C as the face, B as the engine, D as the fast lane, with the shared parts underneath. Build in the order that tests the riskiest idea first.
 
 1. **Week 1: A on your own project.** Design session, narration rules, ledger, callbacks and a first regret library, as Claude Code skills and hooks. Test: does the design session catch the risks you would have missed, and do callbacks land at the right moments?
-2. **Weeks 2 to 4: B as a terminal app.** Planner, narrator and interrupt controller on the Agent SDK. Test: does it feel live?
+2. **Weeks 2 to 4: B on the existing agent.** Prepared narration, the navigator, answers at once, evidence on failure and the live activity line. Test: are there still waits between steps, and does it feel live?
 3. **Weeks 4 to 8: C as a VS Code extension on B.** Test: is typing the spine fast enough, and can you explain the module a week later?
 4. **Any time: D.** Add it when you first hit a real deadline.
 
@@ -136,14 +141,14 @@ Build C as the face, B as the engine, D as the fast lane, with the shared parts 
 | The model's foresight is not good enough, even with the regret library | Five tasks with known traps (double bookings, timezones, a query inside a loop, unlimited uploads, payment webhooks arriving twice), with and without the library | With the library, the senior names at least 4 of the 5 traps before writing code |
 | Typing the spine is too slow | Build the same small feature in C's Type gear and with a plain agent | Type gear takes no more than about twice as long, and you can explain it afterwards |
 | Narration becomes noise | Three real sessions; count each mute, skip or skim | Fewer than a handful of skips per session after tuning |
-| The fast narrator drifts from the plan | Log every narrator action not in the current step | Drift is rare and every drift was escalated |
+| The navigator's prepared steps go stale | Count prepared steps that had to be redone after the user kept their own version | Rare, and a redo is quicker than preparing the step from scratch |
 | You don't actually learn | A week later, explain the module to a friend without notes | You can answer most whys |
 
 The pass marks are proposals, not established benchmarks.
 
 ## Sources
 
-- Claude Agent SDK: streaming output (Architecture B)
+- Claude Code subagents and hooks (Architecture B)
 - Claude Code hooks reference: background hooks (Architectures A and D)
 - VS Code Language Model API (Architecture C)
 - VS Code InlineCompletionItemProvider (Architecture C)
