@@ -90,6 +90,23 @@ test('a full session: start, prompt, edit, failure, callback', () => {
   assert.match(digest, /Callback fired: D-001/);
 });
 
+test('a session that creates .senior/ partway through still records its transcript, and edits outside the project are left out', () => {
+  // The fast lane runs init itself, after SessionStart has already passed over the project.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'senior joined '));
+  runHook('session-start.mjs', { session_id: 'late', cwd: root, hook_event_name: 'SessionStart' }, root);
+  assert.equal(spawnSync(process.execPath, [cli, 'init'], { cwd: root, encoding: 'utf8' }).status, 0);
+
+  const transcript = path.join(root, 'transcript.jsonl');
+  const base = { session_id: 'late', cwd: root, transcript_path: transcript, hook_event_name: 'PostToolUse' };
+  runHook('on-tool.mjs', { ...base, tool_name: 'Write', tool_input: { file_path: path.join(os.tmpdir(), 'scratch.json'), content: '{}' } }, root);
+  runHook('on-tool.mjs', { ...base, tool_name: 'Edit', tool_input: { file_path: path.join(root, 'src', 'invoice.js'), old_string: 'a', new_string: 'b' } }, root);
+
+  const recorded = events(root, 'late');
+  assert.deepEqual(recorded.map((e) => e.type), ['start', 'edit']);
+  assert.equal(recorded[0].transcript, transcript);
+  assert.equal(recorded[1].file, 'src/invoice.js');
+});
+
 test('a broken ledger file never breaks the session', () => {
   const root = project();
   fs.writeFileSync(path.join(root, '.senior', 'ledger', 'D-001-broken.json'), '{ not json');

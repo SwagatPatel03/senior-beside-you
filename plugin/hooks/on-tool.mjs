@@ -4,7 +4,7 @@
 import { callbackMessage, computeCallbacks, describeTouch } from '../core/callbacks.mjs';
 import { activeEntries } from '../core/ledger.mjs';
 import { appendEvent, loadState, saveState } from '../core/sessions.mjs';
-import { addContext, runHook } from './io.mjs';
+import { addContext, recordEvent, runHook } from './io.mjs';
 
 const MAX_STORED = 4000;
 
@@ -29,14 +29,16 @@ await runHook(async (input, root) => {
   const touch = describeTouch(root, input);
   const toolUseId = input.tool_use_id || undefined;
 
+  // Edits to files outside the project, such as scratch files, are not part of its story.
+  if ((touch.kind === 'edit' || touch.kind === 'edit-failed') && !touch.files[0]) return;
   if (touch.kind === 'edit') {
-    appendEvent(root, sessionId, { type: 'edit', tool: touch.tool, file: touch.files[0] || '', toolUseId, ...editChange(input) });
+    recordEvent(root, input, { type: 'edit', tool: touch.tool, file: touch.files[0], toolUseId, ...editChange(input) });
   } else if (touch.kind === 'edit-failed') {
-    appendEvent(root, sessionId, { type: 'edit-failed', tool: touch.tool, file: touch.files[0] || '', toolUseId });
+    recordEvent(root, input, { type: 'edit-failed', tool: touch.tool, file: touch.files[0], toolUseId });
   } else if (touch.kind === 'command') {
-    appendEvent(root, sessionId, { type: 'command', command: touch.command.slice(0, 300), toolUseId });
+    recordEvent(root, input, { type: 'command', command: touch.command.slice(0, 300), toolUseId });
   } else if (touch.kind === 'failure') {
-    appendEvent(root, sessionId, { type: 'failure', command: touch.command.slice(0, 300), snippet: touch.snippet, toolUseId });
+    recordEvent(root, input, { type: 'failure', command: touch.command.slice(0, 300), snippet: touch.snippet, toolUseId });
   } else {
     return;
   }

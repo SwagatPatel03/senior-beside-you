@@ -5,6 +5,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { findRoot, seniorPath } from '../core/paths.mjs';
+import { appendEvent, sessionLogPath } from '../core/sessions.mjs';
+
+/**
+ * Record an event for this session. When `.senior/` was created partway through a session (the
+ * fast lane runs init itself), SessionStart never wrote this session's opening event, so the first
+ * event written here opens the record with the transcript path that replays need.
+ */
+export function recordEvent(root, input, event) {
+  const sessionId = input.session_id;
+  if (!fs.existsSync(sessionLogPath(root, sessionId))) {
+    appendEvent(root, sessionId, { type: 'start', source: 'joined', transcript: input.transcript_path || '' });
+  }
+  appendEvent(root, sessionId, event);
+}
 
 export async function readInput() {
   const chunks = [];

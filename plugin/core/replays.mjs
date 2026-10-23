@@ -67,6 +67,8 @@ export function saveReplay(root, input, { now = new Date() } = {}) {
 }
 
 export function loadReplay(root, id) {
+  // Ids come from tools and the command line; only plain ids may name a file in the folder.
+  if (typeof id !== 'string' || !/^[\w-]+$/.test(id)) return null;
   return readJson(path.join(replaysDir(root), `${id}.json`), null);
 }
 

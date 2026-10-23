@@ -29,8 +29,8 @@ export function reasonsFromTranscript(file) {
     const content = entry?.message?.content;
     if (entry?.type !== 'assistant' || !Array.isArray(content)) continue;
     for (const block of content) {
+      // Only what the agent said out loud counts as its reason. Its private reasoning stays out.
       if (block.type === 'text' && block.text?.trim()) lastWords = block.text.trim();
-      else if (block.type === 'thinking' && block.thinking?.trim()) lastWords = block.thinking.trim();
       else if (block.type === 'tool_use' && block.id) {
         reasons.set(block.id, lastWords);
         lastWords = '';
@@ -40,9 +40,31 @@ export function reasonsFromTranscript(file) {
   return reasons;
 }
 
+/** The last thing the agent wrote after its last tool call: usually its summary of what was done and skipped. */
+export function closingWords(file) {
+  if (!file || !fs.existsSync(file)) return '';
+  let closing = '';
+  for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+    let entry;
+    try {
+      entry = line.trim() ? JSON.parse(line) : null;
+    } catch {
+      continue;
+    }
+    const content = entry?.message?.content;
+    if (entry?.type !== 'assistant' || !Array.isArray(content)) continue;
+    for (const block of content) {
+      if (block.type === 'tool_use') closing = '';
+      else if (block.type === 'text' && block.text?.trim()) closing = block.text.trim();
+    }
+  }
+  return closing;
+}
+
 export function pickSession(sessions, id) {
   if (id) return sessions.find((s) => s.id === id || s.id.startsWith(id)) || null;
-  const withWork = sessions.filter((s) => s.events.some((e) => e.type === 'edit' || e.type === 'failure'));
+  // Sessions that only built a replay change no project file, so they are passed over.
+  const withWork = sessions.filter((s) => s.events.some((e) => (e.type === 'edit' && e.file) || e.type === 'failure'));
   return withWork.sort((a, b) => b.endedAt.localeCompare(a.endedAt))[0] || null;
 }
 
@@ -76,6 +98,8 @@ export function buildMaterial(root, sessionId) {
       out.push(`Ledger callback: ${e.decision}, because ${(e.reasons || []).join(', ')} was ${e.trigger === 'failure' ? 'in a failure' : 'edited'}.`);
     }
   }
+  const closing = closingWords(transcript);
+  if (closing) out.push('', '## How the agent finished', clip(closing, 3000));
   const text = out.join('\n');
   return text.length > MAX_TOTAL ? `${text.slice(0, MAX_TOTAL)}\n\n[The material was cut here. Build the replay from what is above.]` : text;
 }

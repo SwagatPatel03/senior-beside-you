@@ -75,6 +75,9 @@ test('replays validate, save as JSON and Markdown, and list newest first', () =>
   assert.deepEqual(core.listReplays(root).map((r) => r.title), ['Second', 'CSV export']);
   const loaded = core.loadReplay(root, first.id);
   assert.equal(loaded.scenes[0].files[0].path, 'reports/export.py');
+  // An id that is not a plain id never names a file, even one that exists.
+  fs.writeFileSync(path.join(root, '.senior', 'elsewhere.json'), '{"id":"x","scenes":[]}');
+  assert.equal(core.loadReplay(root, '../elsewhere'), null);
   const markdown = fs.readFileSync(path.join(root, '.senior', 'replays', `${first.id}.md`), 'utf8');
   assert.match(markdown, /## Scene 1: Why the export streams rows/);
   assert.match(markdown, /Not verified: The export with a full month of data/);
@@ -88,6 +91,7 @@ test('replay material pairs each change with the reason given before it', () => 
     JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'I will stream rows so memory stays flat.' }, { type: 'tool_use', id: 'toolu_1', name: 'Edit', input: {} }] } }),
     'not json',
     JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'toolu_2', name: 'Bash', input: {} }] } }),
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'Done. Skipped for now: a test for an empty month.' }] } }),
   ].join('\n'));
 
   const reasons = reasonsFromTranscript(transcript);
@@ -103,6 +107,11 @@ test('replay material pairs each change with the reason given before it', () => 
   assert.match(material, /The user asked: Add the CSV export/);
   assert.match(material, /Reason the agent gave: I will stream rows so memory stays flat\.[\s\S]*Edited reports\/export\.py[\s\S]*yield row/);
   assert.match(material, /Command failed: pytest[\s\S]*AssertionError/);
+  assert.match(material, /## How the agent finished\nDone\. Skipped for now: a test for an empty month\./);
+
+  // A later session that only built a replay changed no project file, so it is not picked.
+  core.appendEvent(root, 's2', { type: 'command', command: 'senior replay save' }, new Date(Date.now() + 60000));
+  assert.match(buildMaterial(root), /Add the CSV export/);
 });
 
 test('the CLI saves a plan with its brief and a replay', () => {
