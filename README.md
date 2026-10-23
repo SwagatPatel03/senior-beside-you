@@ -48,7 +48,7 @@ Open your project and start Claude Code in its folder. Then:
 | Command | What it does |
 | --- | --- |
 | `/senior:design <feature>` | Before code: asks the two or three questions that change the design, names the three things most likely to hurt later, confirms examples that become the first tests, sorts decisions into one-way and two-way, records them, and saves a step-by-step plan. |
-| `/senior:pair <feature>` | Builds the plan with you in VS Code. You type the important lines from ghost text, the routine code is filled in, each step is checked by running it, and each decision is linked to the code that carries it out. Runs the design session first if there is no plan. Use `/senior:pair continue <feature>` to pick up a plan. |
+| `/senior:pair <feature>` | Builds the plan with you in VS Code. You type the important lines from ghost text, the routine code is filled in, each step is checked by running it, and each decision is linked to the code that carries it out. While you type one step, a navigator prepares the next in the background, so there is no wait between steps. Runs the design session first if there is no plan. Use `/senior:pair continue <feature>` to pick up a plan. |
 | `/senior:fast <task>` | The fast lane for deadline days. One quick pushback when the task as asked breaks a recorded decision or walks into a known failure, then full speed. Every edit and command is recorded with the reason given for it. |
 | `/senior:replay` | Turns the last session into a replay of three to eight scenes, and walks you through it in the Senior panel or in the terminal. You can stop on any scene and ask why. |
 | `/senior:why <question>` | Answers "why is it like this?" from the decision ledger, then carries on. |
@@ -87,6 +87,8 @@ Claude Code ── senior plugin ── editor bridge (MCP, stdio)
 ```
 
 Each VS Code window with the extension writes a lock file to `~/.senior/ide/` with its port and a random token, readable only by your user. The bridge picks the window whose folder contains the folder Claude Code is working in. The extension refuses requests without the token and every request that comes from a web page. Neither part sends anything over the internet; Claude Code does the model work under your own account.
+
+The plugin's hooks also tell the editor, in the background, what Claude Code is doing at each moment, which the panel shows as a live line. The navigator that prepares the next step is a Claude Code subagent (`plugin/agents/navigator.md`) that only reads the code, so it never needs to ask for permission while it works.
 
 ## Does the design session catch the risks you would miss?
 
@@ -133,7 +135,7 @@ The integration tests download VS Code into `apps/vscode/.vscode-test/` the firs
 | `plugin/core/` | The shared library: ledger, plans, regret library, callbacks, session records. No dependencies and no knowledge of Claude Code or VS Code. |
 | `plugin/cli/` | The Senior CLI, the only writer of the ledger. |
 | `plugin/hooks/`, `plugin/bridge/` | Thin wrappers that connect the core to Claude Code and to the editor. |
-| `plugin/skills/`, `plugin/output-styles/`, `plugin/regrets/` | Prompts and data. |
+| `plugin/skills/`, `plugin/agents/`, `plugin/output-styles/`, `plugin/regrets/` | Prompts and data. |
 | `apps/vscode/` | The VS Code extension. |
 | `evals/foresight/` | The test of the design session. |
 | `test/` | Tests for the plugin. |
