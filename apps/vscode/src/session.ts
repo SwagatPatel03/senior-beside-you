@@ -2,7 +2,7 @@
 
 import * as vscode from 'vscode';
 import { appendEvent, findRoot } from '../../../plugin/core/index.mjs';
-import type { ActivePiece, Connection, Gear, JournalEntry, PanelState, SayKind, Stats, StepInfo } from './panel/protocol.ts';
+import type { ActivePiece, Connection, Gear, JournalEntry, PanelMeta, PanelState, ReplayPlace, ReplaySummary, ReplayView, SayKind, Stats, StepInfo } from './panel/protocol.ts';
 
 const MAX_JOURNAL = 300;
 
@@ -26,6 +26,9 @@ export class SessionStore implements vscode.Disposable {
   lastBridgeCall: number | null = null;
   claudeFound: boolean | 'unknown' = 'unknown';
   pluginInstalled: boolean | 'unknown' = 'unknown';
+  /** The replay open in the panel, and the saved replays of this project. Set by the replay controller. */
+  replay: ReplayView | null = null;
+  replays: ReplaySummary[] = [];
 
   private readonly entryEmitter = new vscode.EventEmitter<JournalEntry>();
   private readonly metaEmitter = new vscode.EventEmitter<void>();
@@ -71,17 +74,22 @@ export class SessionStore implements vscode.Disposable {
     };
   }
 
-  snapshot(): PanelState {
+  meta(): PanelMeta {
     return {
       gear: this.gear,
       workspace: this.workspaceRoot(),
       step: this.step,
-      journal: [...this.journal],
       stats: { ...this.stats },
       active: this.active,
       connection: this.connection(),
       readAloud: this.readAloud,
+      replay: this.replay,
+      replays: this.replays,
     };
+  }
+
+  snapshot(): PanelState {
+    return { ...this.meta(), journal: [...this.journal] };
   }
 
   changed(): void {
@@ -116,8 +124,8 @@ export class SessionStore implements vscode.Disposable {
   }
 
   /** A question the user asked in the editor. Claude reads it in the next tool result. */
-  ask(text: string, where?: string): UserQuestion {
-    const entry = this.add({ kind: 'question', text, where, answered: false });
+  ask(text: string, where?: string, replay?: ReplayPlace): UserQuestion {
+    const entry = this.add({ kind: 'question', text, where, ...(replay ? { replay } : {}), answered: false });
     const question = { id: entry.id, text, where, delivered: false };
     this.questions.push(question);
     this.questionEmitter.fire(question);
@@ -132,6 +140,12 @@ export class SessionStore implements vscode.Disposable {
     const pending = this.questions.filter((q) => !q.delivered);
     for (const q of pending) q.delivered = true;
     return pending.map(({ id, text, where }) => (where ? { id, text, where } : { id, text }));
+  }
+
+  /** Note a replay in the journal the first time it is opened, so it can be watched again from there. */
+  noteReplay(replayId: string, title: string, scenes: number): void {
+    if (this.journal.some((e) => e.kind === 'replay' && e.replayId === replayId)) return;
+    this.add({ kind: 'replay', replayId, title, scenes });
   }
 
   beginStep(step: StepInfo): void {

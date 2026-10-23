@@ -28,7 +28,6 @@ exports.run = async function run() {
 
   const api = await extension.activate();
   assert.ok(fs.existsSync(path.join(process.env.SENIOR_IDE_DIR, `${api.bridge.port}.json`)), 'the bridge wrote its lock file');
-  await vscode.commands.executeCommand('senior.focus');
 
   const call = async (name, args = {}) => {
     const res = await fetch(`http://127.0.0.1:${api.bridge.port}/tool`, {
@@ -50,9 +49,10 @@ exports.run = async function run() {
   const end = Date.now() + 20000;
   while (!api.session.active && Date.now() < end) await sleep(40);
   assert.ok(api.session.active, 'the piece reached the editor');
-  // The panel was focused above, and on a slow machine it can finish loading after the guide has
-  // opened the file. A person would click into the editor; the test does the same.
-  await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
+  // Type into the guided file the way a person who clicked into it would.
+  const doc = vscode.workspace.textDocuments.find((d) => d.uri.fsPath.endsWith(path.join('src', 'greet.js')));
+  assert.ok(doc, 'the guided file is open');
+  await vscode.window.showTextDocument(doc, { preserveFocus: false });
   await sleep(200);
   for (const ch of "function greet(name) {\n  return `Hello, ${name}`;\n}") {
     if (!api.session.active) break;
@@ -66,6 +66,7 @@ exports.run = async function run() {
   assert.equal(written, "'use strict';\n\nfunction greet(name) {\n  return `Hello, ${name}`;\n}\nmodule.exports = { greet };\n");
   await call('end_step', { summary: 'The module greets by name.', verified: ['The file reads back as planned.'], takeaway: 'Name the one thing a module does.' });
   assert.ok(api.session.snapshot().journal.some((e) => e.kind === 'summary'), 'the step summary reached the panel journal');
+  await vscode.commands.executeCommand('senior.focus');
 
   await vscode.commands.executeCommand('workbench.action.files.saveAll');
   await vscode.commands.executeCommand('workbench.action.closeAllEditors');

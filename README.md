@@ -13,8 +13,8 @@ The design behind it is in [docs/architectures.md](docs/architectures.md).
 
 | Part | What it is | Where |
 | --- | --- | --- |
-| **The senior plugin for Claude Code** | Design sessions, a decision ledger with callbacks, a regret library of known failures, narration rules, onboarding for large repos, the project story, and pairing in your editor. | [`plugin/`](plugin) |
-| **Senior for VS Code** | The editor side of pairing: ghost text for the lines you write, routine code filled in, three gears for how hands-on you want to be, and a journal of the session. | [`apps/vscode/`](apps/vscode) |
+| **The senior plugin for Claude Code** | Design sessions, a decision ledger with callbacks, a regret library of known failures, narration rules, onboarding for large repos, the project story, pairing in your editor, and a fast lane whose work you can replay afterwards. | [`plugin/`](plugin) |
+| **Senior for VS Code** | The editor side of pairing: ghost text for the lines you write, routine code filled in, three gears for how hands-on you want to be, a journal of the session, and a viewer for replays. | [`apps/vscode/`](apps/vscode) |
 
 The plugin works on its own in any terminal. The extension needs the plugin, because Claude Code does the thinking and the extension is how it reaches your editor.
 
@@ -49,6 +49,8 @@ Open your project and start Claude Code in its folder. Then:
 | --- | --- |
 | `/senior:design <feature>` | Before code: asks the two or three questions that change the design, names the three things most likely to hurt later, confirms examples that become the first tests, sorts decisions into one-way and two-way, records them, and saves a step-by-step plan. |
 | `/senior:pair <feature>` | Builds the plan with you in VS Code. You type the important lines from ghost text, the routine code is filled in, each step is checked by running it, and each decision is linked to the code that carries it out. Runs the design session first if there is no plan. Use `/senior:pair continue <feature>` to pick up a plan. |
+| `/senior:fast <task>` | The fast lane for deadline days. One quick pushback when the task as asked breaks a recorded decision or walks into a known failure, then full speed. Every edit and command is recorded with the reason given for it. |
+| `/senior:replay` | Turns the last session into a replay of three to eight scenes, and walks you through it in the Senior panel or in the terminal. You can stop on any scene and ask why. |
 | `/senior:why <question>` | Answers "why is it like this?" from the decision ledger, then carries on. |
 | `/senior:decide <decision>` | Records a decision in the middle of a build, or replaces one through an announced change. |
 | `/senior:onboard` | Maps a large codebase once and writes `.senior/repo-map.md`. |
@@ -69,6 +71,7 @@ The first design session creates `.senior/` in your project. The hooks do nothin
 | `features/` | The plan for each feature and its design brief. |
 | `regrets/` | Your own regret library entries, read alongside the seed library in [`plugin/regrets/`](plugin/regrets). |
 | `story/` | The project story, one page per module. |
+| `replays/` | Replays of fast work, as JSON for the editor and Markdown for reading. |
 | `sessions/`, `state/` | Records of what happened in each session, used for the story. Not committed: `.senior/.gitignore` leaves them out. |
 
 Commit the rest of `.senior/` with your code. It is the memory of why your code is the way it is.

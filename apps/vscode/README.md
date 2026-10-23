@@ -40,6 +40,12 @@ The Senior panel keeps a journal of the session: each step, its pieces, your que
 
 When your project has a `.senior` folder, which the Claude Code plugin creates, Senior also records what happened in the editor in `.senior/sessions/`. The plugin uses these records to write the story of your project with `/senior:story`.
 
+## Replays of fast work
+
+Some days there is no time to type anything. In Claude Code, `/senior:fast <task>` does the work at full speed. It pushes back once if the task as asked would break a recorded decision or walk into a known failure. It records every step with the reason given at the time. Later, `/senior:replay` turns that record into a few short scenes and opens them in the Senior panel. You move through the scenes at your own pace, open each change side by side, and ask why on any scene. Claude Code answers in the panel while the replay is running.
+
+Saved replays stay in `.senior/replays/`. Watch one again at any time with **Senior: Watch a replay**, or from the list in the panel.
+
 ## Getting started
 
 You need:
@@ -69,6 +75,7 @@ If the feature has no plan yet, Claude Code starts with a short design session. 
 | Senior: Take over typing | Escape, while Senior is typing |
 | Senior: Fill in this piece for me | |
 | Senior: Skip this piece | |
+| Senior: Watch a replay | Left and right arrows move between scenes |
 | Senior: Show the Senior panel | |
 | Senior: Set up Claude Code for Senior | |
 

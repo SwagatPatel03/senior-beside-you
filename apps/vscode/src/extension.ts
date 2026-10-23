@@ -10,6 +10,7 @@ import { Decorations } from './guide/decorations.ts';
 import { GhostTextProvider } from './guide/inline.ts';
 import type { FromPanel, Gear } from './panel/protocol.ts';
 import { PanelProvider } from './panel/provider.ts';
+import { REPLAY_SCHEME, ReplayController } from './replay/controller.ts';
 import { SessionStore } from './session.ts';
 import { detect, installPlugin } from './setup.ts';
 import { StatusItem } from './status.ts';
@@ -19,6 +20,7 @@ const GEARS: Gear[] = ['type', 'accept', 'watch'];
 export interface SeniorApi {
   session: SessionStore;
   guide: GuideController;
+  replays: ReplayController;
   bridge: { port: number; token: string };
 }
 
@@ -40,12 +42,35 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
   const session = new SessionStore(context.globalState, root);
   const decorations = new Decorations();
   const guide = new GuideController(session, decorations, root);
-  const handlers = new BridgeHandlers(session, guide, root, (dir) => {
+  const replays = new ReplayController(session, root, () => panel.reveal());
+  const handlers = new BridgeHandlers(session, guide, replays, root, (dir) => {
     if (dir) projectDir = dir;
   });
   const bridge = new BridgeServer(handlers.handle, context.extension.packageJSON.version as string, log);
   const panel = new PanelProvider(context.extensionUri, session, (message) => void onPanel(message));
   const status = new StatusItem(session);
+
+  async function watchReplay(id?: string): Promise<void> {
+    let chosen = id;
+    if (!chosen) {
+      replays.refreshList();
+      if (!session.replays.length) {
+        void vscode.window.showInformationMessage('This project has no replays yet. After fast work, run /senior:replay in Claude Code to make one.');
+        return;
+      }
+      const pick = await vscode.window.showQuickPick(
+        session.replays.map((r) => ({ label: r.title, description: `${r.scenes} scenes`, detail: new Date(r.createdAt).toLocaleString(), id: r.id })),
+        { title: 'Watch a replay', placeHolder: 'Choose a replay' },
+      );
+      chosen = pick?.id;
+    }
+    if (!chosen) return;
+    try {
+      replays.show(chosen);
+    } catch (err) {
+      void vscode.window.showErrorMessage(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   async function askWhy(prefill?: string): Promise<void> {
     const editor = vscode.window.activeTextEditor;
@@ -68,11 +93,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
       case 'setGear':
         await session.setGear(message.gear);
         break;
-      case 'ask':
-        await askWhy(message.text);
+      case 'ask': {
+        // During a replay, a question is about the scene being read, not the line under the cursor.
+        const place = replays.place();
+        if (place) session.ask(message.text.trim(), place.where, place.at);
+        else await askWhy(message.text);
         break;
+      }
       case 'piece':
         await guide.action(message.action);
+        break;
+      case 'replay':
+        if (message.action === 'open') await watchReplay(message.id);
+        else if (message.action === 'go') replays.go(message.index);
+        else if (message.action === 'showChange') await replays.showChange(message.file);
+        else if (message.action === 'finish') replays.finish();
+        else replays.close();
         break;
       case 'openFile': {
         const r = root();
@@ -108,10 +144,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
     session,
     decorations,
     guide,
+    replays,
     bridge,
     panel,
     status,
     vscode.window.registerWebviewViewProvider(PanelProvider.viewId, panel),
+    vscode.workspace.registerTextDocumentContentProvider(REPLAY_SCHEME, replays),
+    vscode.commands.registerCommand('senior.watchReplay', () => watchReplay()),
     // Guided pieces live in project files on disk, in any language.
     vscode.languages.registerInlineCompletionItemProvider({ scheme: 'file' }, new GhostTextProvider(guide)),
     vscode.commands.registerCommand('senior.askWhy', () => askWhy()),
@@ -139,7 +178,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
   }
   void refreshSetup();
 
-  return { session, guide, bridge: bridge.address };
+  return { session, guide, replays, bridge: bridge.address };
 }
 
 export function deactivate(): void {

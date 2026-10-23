@@ -153,5 +153,14 @@ export function Entry({ entry }: { entry: JournalEntry }) {
       );
     case 'notice':
       return <p class={`notice ${entry.tone ?? 'info'}`}>{entry.text}</p>;
+    case 'replay':
+      return (
+        <p class="replay-entry">
+          <span class="label">Replay</span> {entry.title} <span class="quiet">· {entry.scenes} scenes</span>{' '}
+          <button class="link" onClick={() => send({ type: 'replay', action: 'open', id: entry.replayId })}>
+            Watch
+          </button>
+        </p>
+      );
   }
 }

@@ -5,6 +5,7 @@ import * as vscode from 'vscode';
 import type { GuideController } from '../guide/controller.ts';
 import type { Piece } from '../guide/text.ts';
 import type { SayKind } from '../panel/protocol.ts';
+import type { ReplayController } from '../replay/controller.ts';
 import type { SessionStore } from '../session.ts';
 
 const GUIDE_WAIT_MS = 90_000;
@@ -24,6 +25,7 @@ export class BridgeHandlers {
   constructor(
     private readonly session: SessionStore,
     private readonly guide: GuideController,
+    private readonly replays: ReplayController,
     private readonly workspaceRoot: () => string | null,
     private readonly useProject: (dir: string | undefined) => void,
   ) {}
@@ -73,6 +75,14 @@ export class BridgeHandlers {
         return this.withQuestions({ ok: true });
       case 'open_file':
         return this.withQuestions(await this.openFile(text(args.file, 'file'), Number(args.line) || undefined, text(args.why, 'why')));
+      case 'show_replay': {
+        const id = text(args.id, 'id');
+        // A replay the user already finished is reported once; the next call opens it again.
+        const ended = this.replays.takeEnding(id);
+        if (ended) return this.withQuestions(ended);
+        this.replays.show(id);
+        return this.withQuestions(await this.replays.watch(GUIDE_WAIT_MS, signal));
+      }
       case 'end_step':
         this.session.endStep(text(args.summary, 'summary'), list(args.verified), list(args.notVerified), text(args.takeaway, 'takeaway', false) || undefined);
         return this.withQuestions({ ok: true });

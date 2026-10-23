@@ -103,6 +103,11 @@
         "category": "Senior"
       },
       {
+        "command": "senior.watchReplay",
+        "title": "Watch a replay",
+        "category": "Senior"
+      },
+      {
         "command": "senior.focus",
         "title": "Show the Senior panel",
         "category": "Senior"

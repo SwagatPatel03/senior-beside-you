@@ -40,30 +40,51 @@ export function Header({ state }: { state: PanelState }) {
           {connection.text}
         </span>
       </div>
-      {state.step && (
-        <div class="step-line">
-          <span class="label">
-            Step {state.step.index} of {state.step.total}
-          </span>
-          <span class="step-title">{state.step.title}</span>
+      {state.replay ? (
+        <div class="step-line replay-line">
+          <div class="replay-head">
+            <span class="label">Replay</span>
+            <ReadAloud on={state.readAloud} />
+            <button class="quiet-button close" title="Close the replay and go back to the session" onClick={() => send({ type: 'replay', action: 'close' })}>
+              Close
+            </button>
+          </div>
+          <span class="step-title">{state.replay.title}</span>
+        </div>
+      ) : (
+        state.step && (
+          <div class="step-line">
+            <span class="label">
+              Step {state.step.index} of {state.step.total}
+            </span>
+            <span class="step-title">{state.step.title}</span>
+          </div>
+        )
+      )}
+      {!state.replay && (
+        <div class="gears" role="radiogroup" aria-label="Gear">
+          {GEARS.map((g) => (
+            <button key={g.gear} role="radio" aria-checked={state.gear === g.gear} class={state.gear === g.gear ? 'gear on' : 'gear'} title={g.hint} onClick={() => send({ type: 'setGear', gear: g.gear })}>
+              {g.label}
+            </button>
+          ))}
+          <ReadAloud on={state.readAloud} />
         </div>
       )}
-      <div class="gears" role="radiogroup" aria-label="Gear">
-        {GEARS.map((g) => (
-          <button key={g.gear} role="radio" aria-checked={state.gear === g.gear} class={state.gear === g.gear ? 'gear on' : 'gear'} title={g.hint} onClick={() => send({ type: 'setGear', gear: g.gear })}>
-            {g.label}
-          </button>
-        ))}
-        <button
-          class={`aloud ${state.readAloud ? 'on' : ''}`}
-          title={state.readAloud ? 'Stop reading the narration aloud' : 'Read the narration aloud with your system voice'}
-          aria-pressed={state.readAloud}
-          onClick={() => send({ type: 'toggleReadAloud' })}
-        >
-          {state.readAloud ? 'Reading aloud' : 'Read aloud'}
-        </button>
-      </div>
     </header>
+  );
+}
+
+function ReadAloud({ on }: { on: boolean }) {
+  return (
+    <button
+      class={`aloud ${on ? 'on' : ''}`}
+      title={on ? 'Stop reading the narration aloud' : 'Read the narration aloud with your system voice'}
+      aria-pressed={on}
+      onClick={() => send({ type: 'toggleReadAloud' })}
+    >
+      {on ? 'Reading aloud' : 'Read aloud'}
+    </button>
   );
 }
 
@@ -137,6 +158,26 @@ export function Welcome({ state }: { state: PanelState }) {
       <p class="quiet">
         Ask why at any moment: put the cursor on the line you are curious about and press <Keys keys={ASK_WHY_KEYS} />.
       </p>
+
+      {state.replays.length > 0 && (
+        <>
+          <h2>Replays</h2>
+          <p class="quiet">Work done in the fast lane, told as short scenes.</p>
+          <ul class="replay-list">
+            {state.replays.slice(0, 5).map((r) => (
+              <li key={r.id}>
+                <button class="link" onClick={() => send({ type: 'replay', action: 'open', id: r.id })}>
+                  {r.title}
+                </button>
+                <span class="quiet">
+                  {' '}
+                  · {r.scenes} scenes · {new Date(r.createdAt).toLocaleDateString()}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </section>
   );
 }
@@ -183,7 +224,7 @@ export function ActiveBar({ active, gear }: { active: ActivePiece; gear: Gear })
   );
 }
 
-export function Composer() {
+export function Composer({ placeholder = 'Ask why, or tell Senior something' }: { placeholder?: string }) {
   const [text, setText] = useState('');
   const submit = (event: Event) => {
     event.preventDefault();
@@ -196,7 +237,7 @@ export function Composer() {
     <form class="composer" onSubmit={submit}>
       <input
         aria-label="Ask Senior"
-        placeholder="Ask why, or tell Senior something"
+        placeholder={placeholder}
         value={text}
         onInput={(e) => setText((e.target as HTMLInputElement).value)}
       />

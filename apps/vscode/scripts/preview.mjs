@@ -77,6 +77,10 @@ const SAMPLE = {
   gear: 'type',
   workspace: '/projects/gym',
   readAloud: false,
+  replay: null,
+  replays: [
+    { id: '2026-10-22-retry-the-payment-call-safely-k2x9', title: 'Retry the payment call safely', createdAt: new Date().toISOString(), scenes: 4 },
+  ],
   step: { index: 2, total: 5, title: 'Make a booking atomic', why: 'Two members can tap Book on the last place at the same moment.', expect: 'The race test passes.', feature: 'gym-bookings' },
   stats: { typed: 14, accepted: 3, watched: 0, filled: 31, steps: 1, takeaways: 1 },
   connection: { lastCallSecondsAgo: 4, claudeFound: true, pluginInstalled: true },
@@ -109,6 +113,32 @@ const STATES = {
     connection: { lastCallSecondsAgo: null, claudeFound: true, pluginInstalled: false },
   },
   watch: { ...SAMPLE, gear: 'watch', active: { ...SAMPLE.active, watching: true } },
+  replay: {
+    ...SAMPLE,
+    active: null,
+    replay: {
+      id: '2026-10-22-retry-the-payment-call-safely-k2x9',
+      title: 'Retry the payment call safely',
+      task: 'Checkout fails when the payment provider times out. Make it retry before the demo tomorrow.',
+      index: 1,
+      scenes: [
+        { title: 'Where the timeout comes from', kind: 'build', narration: 'The checkout calls the provider once and gives up after five seconds.', decisions: [], files: [] },
+        {
+          title: 'A timeout is not a failure',
+          kind: 'bug',
+          narration: 'The first guess was a slow network, so the retry went in first. The logs showed the provider had already taken the money on the timed-out call. A plain retry would charge the customer twice.',
+          decisions: [{ id: 'D-004', title: 'Every payment request carries an idempotency key' }],
+          files: [{ path: 'src/payments/client.py', change: 'changed' }],
+        },
+        { title: 'The retry, made safe', kind: 'decision', narration: 'The retry sends the same key each time.', decisions: [], files: [] },
+        { title: 'What the tests show', kind: 'check', narration: 'Two tests cover it.', decisions: [], files: [] },
+      ],
+      skipped: ['A test against the real provider sandbox. A key the provider rejects would only show up in production.'],
+      verified: ['pytest tests/test_payments.py: 6 passed'],
+      notVerified: ['Retries under a real network timeout'],
+    },
+    replays: [],
+  },
   diverged: {
     ...SAMPLE,
     active: { ...SAMPLE.active, diverged: { wrote: 'if slot.is_free(): bookings.add(member, slot)', wanted: 'bookings.insert(member, slot)' } },

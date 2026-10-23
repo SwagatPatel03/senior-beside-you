@@ -822,3 +822,184 @@ pre {
 .gear-notes dd {
   margin: 0;
 }
+
+/* Replays */
+
+.replay-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.replay-head .label {
+  margin-right: auto;
+}
+
+.replay-head .aloud {
+  margin: 0;
+}
+
+.replay-head .close {
+  padding: 0;
+  font-size: 11px;
+}
+
+.replay-line {
+  padding-bottom: 10px;
+}
+
+.scene {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scene h2 {
+  font-family: var(--serif);
+  font-weight: normal;
+  font-size: 17px;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.scene-task {
+  margin: 0 0 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--serif);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.scene-kind {
+  color: var(--slate);
+}
+
+.scene.bug .scene-kind {
+  color: var(--oxblood);
+}
+
+.scene.decision .scene-kind {
+  color: var(--brass);
+}
+
+.scene.check .scene-kind {
+  color: var(--sage);
+}
+
+.scene.skipped .scene-kind {
+  color: var(--muted);
+}
+
+.scene-narration {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+.scene-block {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+}
+
+.scene-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.scene-list code {
+  color: var(--brass);
+}
+
+.scene-list .file {
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.scene-list.skipped li::before {
+  content: "– ";
+  color: var(--muted);
+}
+
+.summary-lists ul {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.summary-lists li {
+  padding-left: 16px;
+  position: relative;
+}
+
+.summary-lists li::before {
+  position: absolute;
+  left: 0;
+}
+
+.scene-talk {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scene .actions {
+  margin-top: 12px;
+}
+
+.replay-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ticks {
+  flex: 1;
+  display: flex;
+  gap: 3px;
+}
+
+.tick {
+  flex: 1;
+  height: 4px;
+  min-width: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: var(--rule-strong);
+}
+
+.tick.seen {
+  background: color-mix(in srgb, var(--brass) 45%, transparent);
+}
+
+.tick.on {
+  background: var(--brass);
+}
+
+.tick:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--brass) 70%, transparent);
+}
+
+.replay-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.replay-entry {
+  margin: 0;
+  font-size: 12px;
+}

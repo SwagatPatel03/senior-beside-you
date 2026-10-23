@@ -54,8 +54,7 @@ export class PanelProvider implements vscode.WebviewViewProvider, vscode.Disposa
     this.metaQueued = true;
     setTimeout(() => {
       this.metaQueued = false;
-      const s = this.session;
-      this.post({ type: 'meta', gear: s.gear, step: s.step, stats: { ...s.stats }, active: s.active, connection: s.connection(), readAloud: s.readAloud });
+      this.post({ type: 'meta', meta: this.session.meta() });
     }, 30);
   }
 

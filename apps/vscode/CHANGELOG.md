@@ -11,3 +11,4 @@ The first release.
 - Ask why about any line with Ctrl+Alt+/ (Cmd+Alt+/ on a Mac).
 - A local bridge that lets Claude Code guide the editor through the senior plugin, and setup of that plugin from the panel.
 - Session records in `.senior/sessions/` for the project story.
+- Replays of fast work: scene by scene in the panel, each change side by side, and questions answered by Claude Code while `/senior:replay` runs.

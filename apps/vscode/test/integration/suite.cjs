@@ -187,6 +187,71 @@ test('steps, checks and takeaways reach the panel journal and the project story'
   assert.ok(events.some((e) => e.type === 'step' && e.status === 'done'));
 });
 
+test('a replay opens scene by scene, shows a change side by side, and waits for questions until the user finishes', async () => {
+  const id = '2026-10-22-retry-the-payment-call-a1b2';
+  const before = 'def charge(order):\n    return provider.charge(order.total)\n';
+  const after = 'def charge(order):\n    return provider.charge(order.total, key=order.id)\n';
+  fs.mkdirSync(file('.senior/replays'), { recursive: true });
+  fs.writeFileSync(
+    file(`.senior/replays/${id}.json`),
+    JSON.stringify({
+      id,
+      title: 'Retry the payment call safely',
+      task: 'Retry payments that time out.',
+      source: 'claude-code',
+      createdAt: '2026-10-22T12:00:00.000Z',
+      scenes: [
+        { title: 'Where the call lives', narration: 'One call, no retry.', kind: 'build', decisions: [], files: [] },
+        { title: 'A timeout is not a failure', narration: 'The provider had taken the money.', kind: 'bug', decisions: ['D-004'], files: [{ path: 'src/payments.py', before, after }] },
+      ],
+      skipped: ['A test against the provider sandbox.'],
+      verified: ['pytest: 6 passed'],
+      notVerified: [],
+    }),
+  );
+
+  const first = call('show_replay', { id });
+  await until(() => api.session.replay, 'the replay to open');
+  assert.equal(api.session.replay.index, 0);
+  assert.deepEqual(api.session.replay.scenes[1].files, [{ path: 'src/payments.py', change: 'changed' }]);
+  assert.deepEqual(api.session.replay.scenes[1].decisions, [{ id: 'D-004' }]);
+
+  api.replays.go(1);
+  assert.equal(api.session.replay.index, 1);
+  await api.replays.showChange(0);
+  const diffSide = await until(() => vscode.window.activeTextEditor?.document.uri.scheme === 'senior-replay' && vscode.window.activeTextEditor, 'the change to open');
+  assert.equal(diffSide.document.getText(), after);
+
+  const place = api.replays.place();
+  api.session.ask('Why does the key fix it?', place.where, place.at);
+  const asked = (await first).result;
+  assert.equal(asked.status, 'question');
+  assert.equal(asked.scene, 2);
+  assert.match(asked.userQuestions[0].where, /scene 2 of 2/);
+  await call('say', { kind: 'answer', text: 'The provider sees the same key and returns the first charge.', replyTo: asked.userQuestions[0].id });
+
+  // Asking again for the open replay keeps the user's scene, and the call ends when they finish.
+  const second = call('show_replay', { id });
+  await sleep(200);
+  assert.equal(api.session.replay.index, 1);
+  api.replays.go(2);
+  api.replays.finish();
+  assert.equal((await second).result.status, 'finished');
+  assert.equal(api.session.replay, null);
+
+  // A later run opens it again from the start.
+  const third = call('show_replay', { id });
+  await until(() => api.session.replay, 'the replay to open again');
+  assert.equal(api.session.replay.index, 0);
+  api.replays.close();
+  assert.equal((await third).result.status, 'closed');
+  assert.equal(api.session.snapshot().journal.filter((e) => e.kind === 'replay').length, 1);
+  assert.ok(api.session.replays.some((r) => r.id === id), 'the saved replay is listed');
+
+  const missing = await call('show_replay', { id: '../outside' });
+  assert.equal(missing.status, 400);
+});
+
 exports.run = async function run() {
   const extension = vscode.extensions.getExtension('swagatpatel.senior');
   api = await extension.activate();
@@ -202,6 +267,7 @@ exports.run = async function run() {
     } finally {
       // Every test starts clean, whatever the last one left behind.
       api.guide.stop('The test ended.');
+      api.replays.close();
       await api.session.setGear('type');
       await vscode.workspace.getConfiguration('senior').update('watchSpeed', undefined, vscode.ConfigurationTarget.Global);
       await vscode.commands.executeCommand('workbench.action.files.saveAll');
