@@ -35,6 +35,8 @@ Plans
   plan save [--file f.json]     Save a plan (JSON from the file or stdin) and write its brief.
   plan step <feature> <step-id> <pending|active|done|skipped> [summary...]
                                 Update one step.
+  plan advance <feature> <step-id> [summary...]
+                                Mark a step done and make the next pending step active.
 
 Regret library
   regrets list                  Topics and their entries.
@@ -169,6 +171,15 @@ switch (command) {
       const plan = attempt(() => setStepStatus(r, feature, stepId, status, { summary: summary.join(' ') }));
       const done = plan.steps.filter((s) => s.status === 'done' || s.status === 'skipped').length;
       console.log(`${stepId} is now ${status}. ${done} of ${plan.steps.length} steps are finished.`);
+    } else if (sub === 'advance') {
+      // One call between steps, so the user waits as little as possible.
+      const [feature, stepId, ...summary] = args;
+      if (!feature || !stepId) fail('Usage: plan advance <feature> <step-id> [summary...]');
+      let plan = attempt(() => setStepStatus(r, feature, stepId, 'done', { summary: summary.join(' ') }));
+      const next = plan.steps.find((s) => s.status === 'pending');
+      if (next) plan = attempt(() => setStepStatus(r, feature, next.id, 'active'));
+      const done = plan.steps.filter((s) => s.status === 'done' || s.status === 'skipped').length;
+      console.log(`${stepId} is done. ${done} of ${plan.steps.length} steps are finished.${next ? ` ${next.id} is now active: ${next.title}` : ' Every step is finished.'}`);
     } else {
       fail(HELP);
     }

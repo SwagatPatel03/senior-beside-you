@@ -10,6 +10,7 @@ export declare function toRel(root: string, p: string | undefined | null): strin
 export declare function globToRegExp(glob: string): RegExp;
 export declare function matchesAny(rel: string, globs?: string[]): boolean;
 export declare function pathsInText(root: string, text: string): string[];
+export declare function locationsInText(root: string, text: string): { file: string; line: number }[];
 export declare function slugify(text: string, max?: number): string;
 export declare function readJson<T>(file: string, fallback: T): T;
 export declare function writeJson(file: string, value: unknown): void;

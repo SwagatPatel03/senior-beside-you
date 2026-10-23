@@ -100,12 +100,13 @@ After the user confirms (skip this step in a dry run, but show what you would ha
     "risks": [{ "title": "Two members take the last place", "scene": "...", "cause": "...", "prevention": "...", "regret": "R-bookings-01" }]
   },
   "steps": [
-    { "title": "Turn the examples into tests", "why": "They define done.", "expect": "Three tests fail because booking does not exist yet.", "files": ["tests/test_bookings.py"], "check": "pytest tests/test_bookings.py" }
+    { "title": "Turn the examples into tests", "why": "They define done.", "expect": "Three tests fail because booking does not exist yet.", "files": ["tests/test_bookings.py"], "check": "pytest tests/test_bookings.py" },
+    { "title": "Make a booking atomic", "why": "Two members can tap Book on the last place at the same moment.", "expect": "The race test passes.", "risk": "A check-then-insert lets two members take the last place.", "files": ["src/bookings/service.py"], "check": "pytest tests/test_bookings.py -k race" }
   ]
 }
 ```
 
-   Keep each step small enough to review in about a minute. Each step names the files it touches, the expected result, and the command that checks it. The first step is always to turn the examples into tests and see them fail.
+   Keep each step small enough to review in about a minute. Each step names the files it touches, the expected result, and the command that checks it. Give a step a `risk` when one of the risks above shows up in it; the editor recalls it if the step's check fails. The first step is always to turn the examples into tests and see them fail.
 
 ## Step 7. Hand over
 

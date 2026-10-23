@@ -85,6 +85,40 @@ export function matchesAny(rel, globs = []) {
 /** Pull path-like tokens out of free text, such as a stack trace or a test report. */
 export function pathsInText(root, text) {
   if (!text) return [];
+  const stripped = relativeText(root, text);
+  const found = new Set();
+  const tokens = stripped.match(/(?:[A-Za-z]:)?[\w./\\-]*[\w-]+\.[A-Za-z][\w]{0,7}/g) || [];
+  for (const token of tokens) {
+    const rel = toRel(root, token);
+    if (rel) found.add(rel);
+  }
+  return [...found];
+}
+
+/**
+ * Places a failure points at: file and line pairs in free text, such as the frames of a stack trace
+ * or a test report, in the order they appear. Only files that exist in the project count, and never
+ * files under node_modules.
+ */
+export function locationsInText(root, text) {
+  if (!text) return [];
+  const stripped = relativeText(root, text);
+  const found = [];
+  const seen = new Set();
+  // "src/cart.js:12:5", "tests/test_x.py:14: AssertionError", and Python's 'File "x.py", line 12'.
+  for (const m of stripped.matchAll(/((?:[A-Za-z]:)?[\w./\\-]*[\w-]+\.[A-Za-z]\w{0,7})(?:"?,? line |:)(\d+)/g)) {
+    const rel = toRel(root, m[1]);
+    if (!rel || rel.split('/').includes('node_modules') || !fs.existsSync(path.join(root, rel))) continue;
+    const key = `${rel}:${m[2]}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    found.push({ file: rel, line: Number(m[2]) });
+  }
+  return found;
+}
+
+/** Text with file URLs decoded and the project root removed from absolute paths. */
+function relativeText(root, text) {
   // Node and browsers write stack trace paths as file URLs, with spaces as %20. The slash after
   // "file://" starts the path on Linux and macOS (file:///tmp/x), but not before a Windows drive
   // letter (file:///C:/x).
@@ -103,14 +137,7 @@ export function pathsInText(root, text) {
     .replace(/\\/g, '/')
     .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     .replace(/\//g, '[\\\\/]+');
-  const stripped = text.replace(new RegExp(`${rootPattern}[\\\\/]+`, 'gi'), '');
-  const found = new Set();
-  const tokens = stripped.match(/(?:[A-Za-z]:)?[\w./\\-]*[\w-]+\.[A-Za-z][\w]{0,7}/g) || [];
-  for (const token of tokens) {
-    const rel = toRel(root, token);
-    if (rel) found.add(rel);
-  }
-  return [...found];
+  return text.replace(new RegExp(`${rootPattern}[\\\\/]+`, 'gi'), '');
 }
 
 export function slugify(text, max = 48) {

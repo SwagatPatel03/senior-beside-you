@@ -10,9 +10,11 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
+import { describeActivity } from '../plugin/hooks/on-activity.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const server = path.join(here, '..', 'plugin', 'bridge', 'server.mjs');
+const activityHook = path.join(here, '..', 'plugin', 'hooks', 'on-activity.mjs');
 
 function startBridge(env) {
   const child = spawn(process.execPath, [server], { env: { ...process.env, ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -143,6 +145,46 @@ test('an editor for a different folder is not used', async () => {
     assert.equal(editor.calls.length, 0);
   } finally {
     bridge.stop();
+    editor.close();
+  }
+});
+
+test('the activity hook says in a few words what Claude Code is doing', () => {
+  const project = path.join(os.tmpdir(), 'shop');
+  const pre = (tool_name, tool_input) => describeActivity({ hook_event_name: 'PreToolUse', tool_name, tool_input }, project);
+  assert.deepEqual(pre('Read', { file_path: path.join(project, 'src', 'cart.js') }), { state: 'working', label: 'Reading src/cart.js' });
+  assert.equal(pre('Bash', { command: 'npm test -- --reporter dot', description: 'Run the cart tests' }).label, 'Run the cart tests');
+  assert.equal(pre('Bash', { command: 'npm test' }).label, 'Running npm test');
+  assert.equal(pre('Agent', { subagent_type: 'senior:navigator', description: 'Prepare S2' }).label, 'Asking the navigator to prepare the next step');
+  assert.equal(pre('Edit', { file_path: path.join(os.tmpdir(), 'elsewhere', 'notes.md') }).label, 'Editing notes.md');
+  assert.equal(pre('mcp__plugin_senior_editor__guide', {}), null, 'the panel already shows its own tools');
+  assert.equal(pre('Bash', { command: 'x'.repeat(200) }).label.length, 70);
+  assert.deepEqual(describeActivity({ hook_event_name: 'PostToolUse', tool_name: 'Read' }, project), { state: 'thinking' });
+  assert.deepEqual(describeActivity({ hook_event_name: 'Stop' }, project), { state: 'idle' });
+  assert.deepEqual(describeActivity({ hook_event_name: 'SubagentStop' }, project), { state: 'idle', helper: true });
+});
+
+test('the activity hook reaches the editor for this project in the background, and is silent without one', async () => {
+  const { project, ideDir } = tempDirs();
+  const run = (input) =>
+    new Promise((resolve) => {
+      const child = spawn(process.execPath, [activityHook], { env: { ...process.env, SENIOR_IDE_DIR: ideDir, CLAUDE_PROJECT_DIR: project } });
+      let out = '';
+      child.stdout.on('data', (d) => (out += d));
+      child.on('close', (code) => resolve({ code, out }));
+      child.stdin.end(JSON.stringify(input));
+    });
+  const input = { hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: path.join(project, 'a.py') } };
+
+  assert.deepEqual(await run(input), { code: 0, out: '' });
+  const editor = await fakeEditor(project, ideDir, async () => ({ ok: true }));
+  try {
+    assert.deepEqual(await run(input), { code: 0, out: '' });
+    assert.equal(editor.calls.length, 1);
+    assert.equal(editor.calls[0].name, 'activity');
+    assert.equal(editor.calls[0].args.label, 'Reading a.py');
+    assert.ok(Math.abs(editor.calls[0].args.at - Date.now()) < 10000);
+  } finally {
     editor.close();
   }
 });

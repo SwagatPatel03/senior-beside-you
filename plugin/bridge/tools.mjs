@@ -21,9 +21,26 @@ const piece = {
     },
     text: { type: 'string', description: 'The new code, with the indentation it should have in the file.' },
     why: { type: 'string', description: 'One plain sentence the user reads while this piece is in front of them.' },
+    notice: { type: 'string', description: 'Optional, spine pieces: one plain sentence on the detail worth noticing while typing it, such as the condition that does the real work.' },
+    decision: { type: 'string', description: 'Optional: the ledger decision this piece carries out, such as "D-002". The editor shows it when the user asks why.' },
     expect: { type: 'string', description: 'Probes only: what the user should see when they run the check, if your guess is right.' },
   },
   required: ['file', 'kind', 'where', 'text', 'why'],
+  additionalProperties: false,
+};
+
+const step = {
+  type: 'object',
+  properties: {
+    feature: { type: 'string', description: 'The feature slug from the brief, for example "gym-bookings".' },
+    index: { type: 'integer', minimum: 1 },
+    total: { type: 'integer', minimum: 1 },
+    title: { type: 'string' },
+    why: { type: 'string', description: 'One or two plain sentences: the prepared narration when the step was prepared ahead.' },
+    expect: { type: 'string', description: 'The result you expect when the step is done, such as "two tests pass".' },
+    risk: { type: 'string', description: 'The risk named for this step in the plan. The editor recalls it if the check fails.' },
+  },
+  required: ['index', 'total', 'title', 'why', 'expect'],
   additionalProperties: false,
 };
 
@@ -37,20 +54,8 @@ export const TOOLS = [
   },
   {
     name: 'begin_step',
-    description: 'Show the step the user is about to work on in the Senior panel: its title, why it matters, and the result you expect when it is done. Call it before the first piece of each step.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        feature: { type: 'string', description: 'The feature slug from the brief, for example "gym-bookings".' },
-        index: { type: 'integer', minimum: 1 },
-        total: { type: 'integer', minimum: 1 },
-        title: { type: 'string' },
-        why: { type: 'string', description: 'One or two plain sentences.' },
-        expect: { type: 'string', description: 'The result you expect when the step is done, such as "two tests pass".' },
-      },
-      required: ['index', 'total', 'title', 'why', 'expect'],
-      additionalProperties: false,
-    },
+    description: 'Show the step the user is about to work on in the Senior panel: its title, why it matters (the prepared narration, when the step was prepared ahead), the result you expect, and its risk. The panel shows it at once and can read it aloud. Call it before the first piece of each step.',
+    inputSchema: step,
   },
   {
     name: 'guide',
@@ -91,7 +96,7 @@ export const TOOLS = [
   },
   {
     name: 'show_check',
-    description: 'Show the result of a check you ran yourself with your shell tool (tests, a build, or the command itself) in the Senior panel, next to what you expected.',
+    description: 'Show the result of a check you ran yourself with your shell tool (tests, a build, or the command itself) in the Senior panel, next to what you expected. When it did not match, the editor opens the code the output points at and recalls the step\'s risk, so the user looks at the evidence while you think; then say your guess.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -136,7 +141,7 @@ export const TOOLS = [
   },
   {
     name: 'end_step',
-    description: 'Close the current step in the Senior panel: what changed, what you verified by running something, what you did not verify, and one takeaway. The takeaway is saved for the project story.',
+    description: 'Close the current step in the Senior panel: what changed, what you verified by running something, what you did not verify, and one takeaway. The takeaway is saved for the project story. Pass the next step in next when it is ready, so it opens in the same moment and the user does not wait for a separate begin_step.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -144,6 +149,7 @@ export const TOOLS = [
         verified: { type: 'array', items: { type: 'string' } },
         notVerified: { type: 'array', items: { type: 'string' } },
         takeaway: { type: 'string', description: 'One sentence worth remembering, tied to this step.' },
+        next: { ...step, description: 'The next step, with the same fields as begin_step. It opens at once.' },
       },
       required: ['summary', 'verified', 'notVerified'],
       additionalProperties: false,

@@ -144,3 +144,18 @@ test('the regret library can be pointed at a bundled copy', () => {
     core.setSeedDir(before);
   }
 });
+
+test('the CLI moves a plan to its next step in one call', () => {
+  const root = project();
+  core.savePlan(root, planInput);
+  const first = spawnSync(process.execPath, [cli, 'plan', 'advance', 'gym-bookings', 'S1', 'The', 'tests', 'fail', 'as', 'expected'], { cwd: root, encoding: 'utf8' });
+  assert.equal(first.status, 0, first.stderr);
+  assert.match(first.stdout, /S1 is done\. 1 of 2 steps are finished\. S2 is now active: Add the booking table/);
+  assert.deepEqual(core.loadPlan(root, 'gym-bookings').steps.map((s) => [s.status, s.summary]), [['done', 'The tests fail as expected'], ['active', undefined]]);
+
+  const last = spawnSync(process.execPath, [cli, 'plan', 'advance', 'gym-bookings', 'S2'], { cwd: root, encoding: 'utf8' });
+  assert.match(last.stdout, /S2 is done\. 2 of 2 steps are finished\. Every step is finished\./);
+  const unknown = spawnSync(process.execPath, [cli, 'plan', 'advance', 'gym-bookings', 'S9'], { cwd: root, encoding: 'utf8' });
+  assert.notEqual(unknown.status, 0);
+  assert.match(unknown.stderr, /has no step S9/);
+});

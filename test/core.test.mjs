@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { computeCallbacks, describeTouch } from '../plugin/core/callbacks.mjs';
 import { activeEntries, addEntry, entriesTouching, linkEntry, loadLedger, searchEntries, validateEntry, warningsFor } from '../plugin/core/ledger.mjs';
-import { matchesAny, pathsInText, toRel } from '../plugin/core/paths.mjs';
+import { locationsInText, matchesAny, pathsInText, toRel } from '../plugin/core/paths.mjs';
 import { formatTopicList, loadRegrets, showTopics } from '../plugin/core/regrets.mjs';
 
 function tempProject() {
@@ -54,6 +54,29 @@ test('paths are found inside stack traces even when the root has a space', () =>
   // Node writes stack frames as file URLs, with the space as %20. Found in the first live test.
   const url = `file:///${path.join(root, 'src', 'bookings.mjs').replace(/\\/g, '/').replace(/^\//, '').replace(/ /g, '%20')}`;
   assert.deepEqual(pathsInText(root, `    at createBooking (${url}:3:22)`), ['src/bookings.mjs']);
+});
+
+test('a failure points at file and line pairs that exist in the project, in order', () => {
+  const root = tempProject();
+  fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'tests'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'src', 'cart.js'), '');
+  fs.writeFileSync(path.join(root, 'tests', 'test_cart.py'), '');
+  const url = `file:///${path.join(root, 'src', 'cart.js').replace(/\\/g, '/').replace(/^\//, '').replace(/ /g, '%20')}`;
+  const output = [
+    'AssertionError: 448 !== 449',
+    `    at total (${url}:4:10)`,
+    '    at node:internal/test_runner:1:1',
+    `    at x (${path.join(root, 'node_modules', 'lib', 'index.js')}:9:1)`,
+    `  File "${path.join(root, 'tests', 'test_cart.py')}", line 14, in test_total`,
+    'tests/test_cart.py:14: AssertionError',
+    'src/missing.js:3:1',
+  ].join('\n');
+  assert.deepEqual(locationsInText(root, output), [
+    { file: 'src/cart.js', line: 4 },
+    { file: 'tests/test_cart.py', line: 14 },
+  ]);
+  assert.deepEqual(locationsInText(root, ''), []);
 });
 
 test('ledger validates, numbers, links and supersedes decisions', () => {

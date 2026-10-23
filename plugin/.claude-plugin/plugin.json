@@ -1,7 +1,7 @@
 {
   "name": "senior",
   "displayName": "Senior Developer Beside You",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A senior developer beside you, inside Claude Code: a design session before code, narration at the moments that matter, a decision ledger with callbacks, a regret library, guided pairing in your editor, a fast lane with replays, and a project story.",
   "author": {
     "name": "Swagat Swaroop Patel"
