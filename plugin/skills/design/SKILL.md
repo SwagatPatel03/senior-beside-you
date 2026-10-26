@@ -19,6 +19,12 @@ The Senior CLI is: `node "${CLAUDE_PLUGIN_ROOT}/cli/senior.mjs"`. Below it is wr
 
 **Dry run.** If the request above contains `--dry-run`, this is a rehearsal. Do not create or edit any file and do not run `init`, `ledger add` or `ledger link`. Do not wait for answers. Write the questions you would ask, assume the most likely answers and say what you assumed, then do every other step and show what you would have recorded. Skip the independent review and the established-practice checks in Step 5, and say that they were skipped because this is a dry run.
 
+**When the project is empty.** If the project has no source code yet, three things change:
+
+- In Step 2, one of your three questions may be which language the user knows best. Ask it as a fact about the user, not as a choice between frameworks, and then propose the framework and the test runner yourself.
+- In Step 5, record the language, the framework and the test runner together as one two-way decision. The data store is a one-way decision and goes through the three checks.
+- In Step 6, the first step of the plan sets up the project with the test runner and one passing test. Turning the examples into failing tests becomes the second step.
+
 ## Step 1. Load what is already known
 
 1. Run `senior status`. If it says no `.senior/` folder exists and this is not a dry run, run `senior init` from the project root.
@@ -110,4 +116,12 @@ After the user confirms (skip this step in a dry run, but show what you would ha
 
 ## Step 7. Hand over
 
-End with three or four sentences: what you decided, the one risk to keep in mind, and the first step. Then start the first step unless the user wants to pause. If the Senior editor extension is connected, build the steps with `/senior:pair continue <feature>` so the user writes the important lines themselves.
+End with three or four sentences: what you decided, the one risk to keep in mind, and the first step.
+
+If the ledger was empty in Step 1 and this is not a dry run, this was the user's first day with the senior. After the hand-over, show what the user can do now, in three short points that use the decisions you just recorded:
+
+- one `/senior:why <decision id>` example with a real id from this session,
+- one sentence saying that each decision is linked to its code while you build, and that from then on an edit to that code brings the decision back without a command,
+- one sentence saying that `/senior:fast` is for deadline days, and that `/senior:replay` shows afterwards what was done and why.
+
+Then start the first step unless the user wants to pause. If the Senior editor extension is connected, build the steps with `/senior:pair continue <feature>` so the user writes the important lines themselves.

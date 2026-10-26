@@ -43,17 +43,17 @@ If you install the extension first, its panel offers to install the plugin for y
 
 ## Use it
 
-Open your project and start Claude Code in its folder. Then:
+Open your project and start Claude Code in its folder. Start with `/senior:onboard`, whether your project is big or empty. In a codebase, the senior reads the code, tells you what it noticed, and asks which of those choices were deliberate, so its memory starts with your real decisions. In an empty folder, it asks what you want to build and starts a design session. Either way, it ends by showing you what the other commands do, using your own code and decisions.
 
 | Command | What it does |
 | --- | --- |
+| `/senior:onboard [area]` | The place to start. Maps the codebase once, writes `.senior/repo-map.md`, and on the first day records the existing choices you confirm as decisions. In an empty folder, it starts the design session. |
 | `/senior:design <feature>` | Before code: asks the two or three questions that change the design, names the three things most likely to hurt later, confirms examples that become the first tests, sorts decisions into one-way and two-way, records them, and saves a step-by-step plan. |
 | `/senior:pair <feature>` | Builds the plan with you in VS Code. You type the important lines over a plan traced in your file, the routine code is filled in, each step is checked by running it, and each decision is linked to the code that carries it out. While you type one step, a navigator prepares the next in the background, so there is no wait between steps. Runs the design session first if there is no plan. Use `/senior:pair continue <feature>` to pick up a plan. |
 | `/senior:fast <task>` | The fast lane for deadline days. One quick pushback when the task as asked breaks a recorded decision or walks into a known failure, then full speed. Every edit and command is recorded with the reason given for it. |
 | `/senior:replay` | Turns the last session into a replay of three to eight scenes, and walks you through it in the Senior panel or in the terminal. You can stop on any scene and ask why. |
 | `/senior:why <question>` | Answers "why is it like this?" from the decision ledger, then carries on. |
 | `/senior:decide <decision>` | Records a decision in the middle of a build, or replaces one through an announced change. |
-| `/senior:onboard` | Maps a large codebase once and writes `.senior/repo-map.md`. |
 | `/senior:regret <lesson>` | Adds a failure you learned from to your project's regret library, so the next design session checks for it. |
 | `/senior:story` | Turns the ledger and session records into one page per module, written so you can tell it in an interview. |
 

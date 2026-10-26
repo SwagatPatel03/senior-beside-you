@@ -22,7 +22,7 @@ The Senior CLI is: `node "${CLAUDE_PLUGIN_ROOT}/cli/senior.mjs"`. Below it is wr
 2. Group the work by module. A module is a part of the system the user would name in a conversation, such as "bookings", "payments" or "CSV export", not a single file.
 3. For each module that changed, create or update `.senior/story/<module>.md`. Keep earlier content and add to it. Use these sections:
    - **What it does**: two or three sentences a non-programmer could follow.
-   - **Key decisions**: each with its ledger id, what was chosen, what was rejected, and why.
+   - **Key decisions**: each with its ledger id, what was chosen, what was rejected, and why. A decision found in the existing code and confirmed by the user was already there before the senior arrived, so describe it that way and not as a choice made in a design session.
    - **Bugs and how they were found**: the symptom, the wrong first guess if there was one, what found the real cause, and the fix. Take these from the failures in the session records.
    - **Trade-offs we accepted**: what we gave up and why it was acceptable.
    - **How I would explain it in an interview**: four to six sentences in the first person, as the user would say them.

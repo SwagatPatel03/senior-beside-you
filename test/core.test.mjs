@@ -3,9 +3,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { computeCallbacks, describeTouch } from '../plugin/core/callbacks.mjs';
-import { activeEntries, addEntry, entriesTouching, linkEntry, loadLedger, searchEntries, validateEntry, warningsFor } from '../plugin/core/ledger.mjs';
+import { callbackMessage, computeCallbacks, describeTouch } from '../plugin/core/callbacks.mjs';
+import { activeEntries, addEntry, entriesTouching, formatEntry, linkEntry, loadLedger, searchEntries, validateEntry, warningsFor } from '../plugin/core/ledger.mjs';
 import { locationsInText, matchesAny, pathsInText, toRel } from '../plugin/core/paths.mjs';
+import { hasSourceCode } from '../plugin/core/project.mjs';
+import { statusText } from '../plugin/core/status.mjs';
 import { formatTopicList, loadRegrets, showTopics } from '../plugin/core/regrets.mjs';
 
 function tempProject() {
@@ -199,4 +201,42 @@ test('held-out foresight traps stay out of the seed library', () => {
   for (const phrase of ['soft delete', 'soft-delete', 'offset pagination', 'rolled back', 'rollback', 'after commit', 'on_commit']) {
     assert.ok(!text.includes(phrase), `the seed library must not mention "${phrase}"`);
   }
+});
+
+test('a folder with only a README, a licence and git files has no source code yet', () => {
+  const root = tempProject();
+  for (const name of ['README.md', 'LICENSE', '.gitignore', 'CLAUDE.md']) fs.writeFileSync(path.join(root, name), '');
+  fs.mkdirSync(path.join(root, '.git'));
+  assert.equal(hasSourceCode(root), false);
+  fs.writeFileSync(path.join(root, 'package.json'), '{}');
+  assert.equal(hasSourceCode(root), true);
+});
+
+test('with an empty ledger, the session start points to onboarding in a codebase and to design in an empty folder', () => {
+  const empty = tempProject();
+  const emptyText = statusText(empty);
+  assert.match(emptyText, /no code yet/);
+  assert.doesNotMatch(emptyText, /Repo map/);
+
+  const codebase = tempProject();
+  fs.mkdirSync(path.join(codebase, 'src'));
+  const codeText = statusText(codebase);
+  assert.match(codeText, /already has code, so \/senior:onboard/);
+  assert.match(codeText, /Repo map: none/);
+});
+
+test('a decision found in existing code keeps its origin and needs no design checks', () => {
+  const root = tempProject();
+  const found = { ...booking, origin: 'found-in-code' };
+  assert.deepEqual(validateEntry(found), []);
+  assert.ok(!warningsFor(found).some((w) => w.includes('check')));
+  assert.ok(warningsFor(booking).some((w) => w.includes('check')), 'a one-way decision made with the senior still needs its checks');
+  assert.ok(validateEntry({ ...booking, origin: 'guessed' }).length > 0);
+
+  const entry = addEntry(root, found);
+  assert.equal(entry.origin, 'found-in-code');
+  assert.match(formatEntry(entry), /Found in the existing code and confirmed by the user/);
+  const message = callbackMessage([{ entry, reasons: ['src/bookings/models.py'] }], { files: ['src/bookings/models.py'] });
+  assert.match(message, /found in the existing code and confirmed by the user on/);
+  assert.equal(addEntry(root, booking).origin, undefined);
 });

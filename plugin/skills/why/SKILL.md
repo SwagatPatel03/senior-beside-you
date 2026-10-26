@@ -15,6 +15,6 @@ The question: $ARGUMENTS
 The Senior CLI is: `node "${CLAUDE_PLUGIN_ROOT}/cli/senior.mjs"`.
 
 1. Run `node "${CLAUDE_PLUGIN_ROOT}/cli/senior.mjs" ledger find <file, symbol or key words>`. Try the file path first, then the function name, then plain words.
-2. If a decision is found, answer from it in a short paragraph: what was chosen, what was rejected and why, the risk it guards against, and when it pays off. Point to the line or function where it lives if it is linked.
+2. If a decision is found, answer from it in a short paragraph: what was chosen, what was rejected and why, the risk it guards against, and when it pays off. Point to the line or function where it lives if it is linked. If the entry says it was found in the existing code and confirmed by the user, say so, because the reason came from the user and not from a design session.
 3. If nothing is recorded, say so plainly. Then give your own reasoning, clearly marked as yours and not as a recorded decision. If the answer is a real decision that someone could ask about again, offer to record it with `/senior:decide`.
 4. Keep the answer short. Then say in one sentence where the work was, and carry on from exactly that point.

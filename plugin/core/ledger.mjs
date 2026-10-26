@@ -9,6 +9,9 @@ import { matchesAny, readJson, seniorPath, slugify, writeJson } from './paths.mj
 const REQUIRED = ['title', 'chosen', 'why', 'reversibility'];
 const LIST_FIELDS = ['rejected', 'files', 'symbols', 'examples', 'regrets'];
 const REVERSIBILITY = ['one-way', 'two-way'];
+// A decision without an origin was made with the senior. "found-in-code" means onboarding found it
+// in existing code and the user confirmed it was deliberate.
+const ORIGINS = ['found-in-code'];
 
 export function ledgerDir(root) {
   return seniorPath(root, 'ledger');
@@ -46,6 +49,9 @@ export function validateEntry(entry) {
   if (entry.reversibility && !REVERSIBILITY.includes(entry.reversibility)) {
     problems.push(`"reversibility" must be "one-way" or "two-way", not "${entry.reversibility}".`);
   }
+  if (entry.origin !== undefined && !ORIGINS.includes(entry.origin)) {
+    problems.push(`"origin" must be "found-in-code" or left out, not "${entry.origin}".`);
+  }
   for (const field of LIST_FIELDS) {
     if (entry[field] !== undefined && !Array.isArray(entry[field])) problems.push(`"${field}" must be a list.`);
   }
@@ -63,7 +69,8 @@ export function warningsFor(entry) {
   const warnings = [];
   if (!entry.guards) warnings.push('No "guards" given: which risk does this decision protect against?');
   if (!entry.payoff) warnings.push('No "payoff" given: when will the user see this decision matter?');
-  if (entry.reversibility === 'one-way') {
+  // The design checks are for choosing. A decision found in existing code was not chosen here.
+  if (entry.reversibility === 'one-way' && entry.origin !== 'found-in-code') {
     const checks = entry.checks || {};
     for (const check of ['regretLibrary', 'independentReview', 'openSource']) {
       if (!checks[check]) warnings.push(`One-way decision without the "${check}" check recorded. Record "skipped" and the reason if it was not run.`);
@@ -103,6 +110,7 @@ export function addEntry(root, input, { now = new Date(), supersedes } = {}) {
     created: now.toISOString(),
   };
   if (input.checks) entry.checks = input.checks;
+  if (input.origin) entry.origin = input.origin;
   if (old) {
     entry.supersedes = old.id;
     // A replacement inherits the old links unless it names its own, so callbacks keep firing.
@@ -169,7 +177,8 @@ export function searchEntries(entries, query) {
 
 export function formatEntry(e) {
   const lines = [`${e.id} ${e.title}  [${e.reversibility}${e.status === 'superseded' ? `, superseded by ${e.supersededBy}` : ''}]`];
-  lines.push(`  Decided: ${e.created.slice(0, 10)}${e.feature ? ` for ${e.feature}` : ''}${e.supersedes ? `, replacing ${e.supersedes}` : ''}`);
+  const when = e.origin === 'found-in-code' ? 'Found in the existing code and confirmed by the user' : 'Decided';
+  lines.push(`  ${when}: ${e.created.slice(0, 10)}${e.feature ? ` for ${e.feature}` : ''}${e.supersedes ? `, replacing ${e.supersedes}` : ''}`);
   lines.push(`  Chosen: ${e.chosen}`);
   for (const r of e.rejected || []) lines.push(`  Rejected: ${r.option}, because ${r.why}`);
   lines.push(`  Why: ${e.why}`);

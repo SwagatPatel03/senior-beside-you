@@ -17,6 +17,7 @@ export declare function writeJson(file: string, value: unknown): void;
 
 // project
 export declare function initProject(root: string): string;
+export declare function hasSourceCode(root: string): boolean;
 
 // ledger
 export type Reversibility = 'one-way' | 'two-way';
@@ -40,13 +41,15 @@ export interface DecisionInput {
   regrets?: string[];
   feature?: string;
   checks?: Record<string, string>;
+  origin?: 'found-in-code';
 }
 
-export interface Decision extends Required<Omit<DecisionInput, 'checks'>> {
+export interface Decision extends Required<Omit<DecisionInput, 'checks' | 'origin'>> {
   id: string;
   status: 'active' | 'superseded';
   created: string;
   checks?: Record<string, string>;
+  origin?: 'found-in-code';
   supersedes?: string;
   supersededBy?: string;
   supersededAt?: string;

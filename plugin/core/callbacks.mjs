@@ -77,9 +77,10 @@ export function callbackMessage(hits, touch) {
       trigger === 'failure'
         ? `The failing command's output mentions ${reasons.join(', ')}, which is linked to`
         : `This edit to ${touch.files[0] || 'a file'} touches ${reasons.join(', ')}, which is linked to`;
+    const when = e.origin === 'found-in-code' ? 'found in the existing code and confirmed by the user on' : 'decided on';
     const details = [
-      `${where} decision ${e.id} "${e.title}", decided on ${e.created.slice(0, 10)}.`,
-      `Chosen: ${e.chosen}.`,
+      `${where} decision ${e.id} "${e.title}", ${when} ${e.created.slice(0, 10)}.`,
+      `Chosen: ${e.chosen.replace(/\.$/, '')}.`,
       `Why: ${e.why}`,
       e.guards ? `Guards against: ${e.guards}` : '',
       e.payoff ? `Pays off: ${e.payoff}` : '',
