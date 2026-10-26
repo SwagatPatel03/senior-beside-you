@@ -3,21 +3,45 @@
 // so the same ledger works on Windows, macOS and Linux.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 export const SENIOR_DIR = '.senior';
 const caseInsensitive = process.platform === 'win32';
 
-/** Walk up from `start` to the nearest folder that holds `.senior/`. Returns null when there is none. */
+/**
+ * Walk up from `start` to the nearest folder that holds `.senior/`. Returns null when there is none.
+ * The walk stops below the home folder: `~/.senior/` holds the editor's lock files for the whole
+ * machine, and treating it as a project would pull every folder under home into Senior.
+ */
 export function findRoot(start = process.cwd()) {
   if (!start) return null;
   let dir = path.resolve(start);
   for (;;) {
+    if (isHome(dir)) return null;
     if (fs.existsSync(path.join(dir, SENIOR_DIR))) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) return null;
     dir = parent;
   }
+}
+
+// Windows can name the same folder two ways (C:\Users\SWAGAT~1 and C:\Users\SWAGAT PATEL), so both
+// sides are compared by their real long names.
+function realName(dir) {
+  try {
+    return fs.realpathSync.native(dir);
+  } catch {
+    return path.resolve(dir);
+  }
+}
+
+let home;
+
+function isHome(dir) {
+  home ??= realName(os.homedir());
+  const a = realName(dir);
+  return caseInsensitive ? a.toLowerCase() === home.toLowerCase() : a === home;
 }
 
 export function seniorPath(root, ...parts) {

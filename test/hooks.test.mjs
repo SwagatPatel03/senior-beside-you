@@ -42,6 +42,21 @@ test('hooks stay silent in a project without .senior/', () => {
   assert.ok(!fs.existsSync(path.join(root, '.senior')));
 });
 
+test('the editor lock folder in the home folder does not make every project under home a Senior project', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'senior home '));
+  fs.mkdirSync(path.join(home, '.senior', 'ide'), { recursive: true });
+  const root = path.join(home, 'Projects', 'shop');
+  fs.mkdirSync(root, { recursive: true });
+  const res = spawnSync(process.execPath, [path.join(hooks, 'session-start.mjs')], {
+    input: JSON.stringify({ session_id: 's1', cwd: root, hook_event_name: 'SessionStart' }),
+    encoding: 'utf8',
+    env: { ...process.env, CLAUDE_PROJECT_DIR: root, HOME: home, USERPROFILE: home },
+  });
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(res.stdout, '');
+  assert.ok(!fs.existsSync(path.join(home, '.senior', 'sessions')));
+});
+
 test('a full session: start, prompt, edit, failure, callback', () => {
   const root = project();
   addEntry(root, {
