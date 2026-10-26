@@ -1,13 +1,16 @@
 // Runs guided pieces in the editor. Flesh is applied at once. For spine and probe pieces the user
-// gets an empty slot to write in, ghost text shows what comes next, and the piece completes when what
-// they wrote matches the plan (ignoring spacing). The bridge and the built-in engine both use this.
+// gets one empty line per planned line, the plan is traced on them in Senior's own colour, and the
+// piece completes when what they wrote matches the plan (ignoring spacing). Senior never uses the
+// editor's inline suggestions, so nothing else can hide the plan or be mistaken for it. The bridge and
+// the built-in engine both use this.
 
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { Divergence, Gear, PieceAction, PieceKind, PieceView } from '../panel/protocol.ts';
 import type { SessionStore } from '../session.ts';
-import type { Decorations } from './decorations.ts';
-import { expectedOf, ghostText, locate, progress, writtenLineCount, type Expected, type Piece } from './text.ts';
+import type { Decorations, SlotPaint } from './decorations.ts';
+import type { QuietOthers } from './quiet.ts';
+import { blankLines, expectedOf, isComplete, locate, strayClosers, traceLines, writtenLineCount, type Expected, type LineView, type Piece } from './text.ts';
 
 export type PieceOutcome = 'typed' | 'accepted' | 'watched' | 'filled' | 'kept_own' | 'skipped' | 'failed';
 
@@ -46,11 +49,13 @@ interface Slot {
   expected: Expected;
   eol: string;
   body: string;
-  indent: string;
+  /** The empty lines the piece starts as. */
+  blank: string;
   piece: Piece;
   index: number;
-  accepted: boolean;
   watched: boolean;
+  /** The document line the cursor was last on, to tidy that line when the cursor leaves it. */
+  lastLine?: number;
   divergence?: Divergence;
 }
 
@@ -64,20 +69,28 @@ export class GuideController implements vscode.Disposable {
   /** Edits Senior has sent and not yet seen come back as change events. */
   private readonly pendingOwn: { doc: vscode.TextDocument; offset: number; length: number; text: string }[] = [];
   private typing: NodeJS.Timeout | null = null;
+  private inSlotKey = false;
   private readonly wakers = new Set<() => void>();
+  private readonly slotChanged = new vscode.EventEmitter<void>();
+  /** Fires when a piece opens or closes, or the gear changes how it is shown. */
+  readonly onDidChangeSlot = this.slotChanged.event;
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
     private readonly session: SessionStore,
     private readonly decorations: Decorations,
+    private readonly quiet: QuietOthers,
     private readonly workspaceRoot: () => string | null,
   ) {
     this.disposables.push(
+      this.slotChanged,
       vscode.workspace.onDidChangeTextDocument((e) => this.onChange(e)),
       vscode.window.onDidChangeTextEditorSelection((e) => this.onSelection(e)),
+      vscode.window.onDidChangeActiveTextEditor(() => this.updateKeys()),
       session.onQuestion(() => this.wake()),
       session.onGear((gear) => this.onGear(gear)),
     );
+    void vscode.commands.executeCommand('setContext', 'senior.gear', session.gear);
   }
 
   get guiding(): boolean {
@@ -91,7 +104,7 @@ export class GuideController implements vscode.Disposable {
   }
 
   /** The slot being written, for diagnostics and tests. */
-  inspect(): { file: string; kind: PieceKind; expected: string; region: string; start: number; end: number; divergence?: Divergence } | null {
+  inspect(): { file: string; kind: PieceKind; expected: string; region: string; start: number; end: number; lines: LineView[]; divergence?: Divergence } | null {
     const slot = this.slot;
     if (!slot) return null;
     return {
@@ -101,6 +114,7 @@ export class GuideController implements vscode.Disposable {
       region: this.regionText(slot),
       start: slot.start,
       end: slot.end,
+      lines: this.view(slot).lines,
       ...(slot.divergence ? { divergence: slot.divergence } : {}),
     };
   }
@@ -159,21 +173,47 @@ export class GuideController implements vscode.Disposable {
     }
   }
 
-  /** The ghost text to show at a position, if it is inside the slot being written. */
-  ghostAt(document: vscode.TextDocument, position: vscode.Position): { insertText: string; range: vscode.Range } | null {
+  /** What the line above the piece says, when `document` holds the piece being written. */
+  header(document: vscode.TextDocument): { line: number; index: number; total: number; why: string; gear: Gear } | null {
     const slot = this.slot;
-    const gear = this.session.gear;
-    if (!slot || document !== slot.doc || gear === 'watch' || this.typing) return null;
-    const offset = document.offsetAt(position);
-    if (offset < slot.start || offset > slot.end) return null;
-    const { line, column } = this.cursorIn(slot, offset);
-    const state = progress(this.regionText(slot), slot.expected, line, column);
-    if (state.state !== 'writing') return null;
-    const typed = document.lineAt(position.line).text.slice(0, position.character);
-    const ghost = ghostText(slot.expected, state.line, typed, gear);
-    if (!ghost) return null;
-    const lead = typed.length - typed.trimStart().length;
-    return { insertText: typed.trimStart() + ghost, range: new vscode.Range(position.line, lead, position.line, position.character) };
+    if (!slot || document !== slot.doc) return null;
+    return { line: slot.doc.positionAt(slot.start).line, index: slot.index, total: slot.run.pieces.length, why: slot.piece.why, gear: this.session.gear };
+  }
+
+  /** The first line of the piece being written, for "why?" about the whole piece. */
+  slotLine(): { document: vscode.TextDocument; line: number } | null {
+    const slot = this.slot;
+    return slot ? { document: slot.doc, line: slot.doc.positionAt(slot.start).line } : null;
+  }
+
+  /**
+   * Enter inside a piece. When the planned line below is still empty, go there instead of making
+   * another empty line; anything else is an ordinary Enter.
+   */
+  async nextLine(): Promise<void> {
+    const slot = this.slot;
+    const editor = vscode.window.activeTextEditor;
+    if (slot && editor && editor.document === slot.doc && editor.selection.isEmpty) {
+      const offset = slot.doc.offsetAt(editor.selection.active);
+      const { line, column } = this.cursorIn(slot, offset);
+      const written = this.regionText(slot).split(/\r?\n/);
+      const after = (written[line] ?? '').slice(column);
+      if (line >= 0 && line + 1 < written.length && !written[line + 1].trim() && /^[\s)\]}>'"`;,]*$/.test(after)) {
+        const target = slot.doc.lineAt(editor.selection.active.line + 1).range.end;
+        editor.selection = new vscode.Selection(target, target);
+        return;
+      }
+    }
+    await vscode.commands.executeCommand('type', { text: '\n' });
+  }
+
+  /** Take the whole piece as planned: Tab in the accept gear. */
+  async acceptPiece(): Promise<void> {
+    const slot = this.slot;
+    if (!slot) return;
+    this.stopTyping();
+    await this.replaceRegion(slot, slot.body);
+    await this.finish(slot, 'accepted');
   }
 
   async action(action: PieceAction): Promise<void> {
@@ -195,10 +235,17 @@ export class GuideController implements vscode.Disposable {
       if (!this.regionText(slot).trim()) await this.removeSlotLine(slot);
       await this.finish(slot, 'skipped');
     } else if (action === 'keepMine') {
-      await this.finish(slot, 'kept_own', this.regionText(slot));
+      // Planned lines the user never wrote are left behind as empty lines; drop them.
+      const mine = this.regionText(slot)
+        .split(/\r?\n/)
+        .map((l) => (l.trim() ? l : ''))
+        .join(slot.eol)
+        .replace(/(\r?\n)+$/, '');
+      if (mine !== this.regionText(slot)) await this.replaceRegion(slot, mine);
+      await this.finish(slot, 'kept_own', mine);
     } else if (action === 'showAgain') {
       slot.divergence = undefined;
-      await this.replaceRegion(slot, slot.indent);
+      await this.replaceRegion(slot, slot.blank);
       this.placeCursor(slot);
       this.render();
     }
@@ -230,6 +277,7 @@ export class GuideController implements vscode.Disposable {
     if (this.run === run || this.run === null) {
       this.session.active = null;
       this.session.changed();
+      await this.quiet.restore();
     }
     this.wake();
   }
@@ -249,6 +297,7 @@ export class GuideController implements vscode.Disposable {
     const at = locate(doc.getText(), piece, eol);
     if (!at.ok) throw new PieceError(at.reason);
 
+    if (piece.kind !== 'flesh') await this.quiet.hush();
     await this.edit(doc, at.span.start, at.span.end, at.insert);
 
     if (piece.kind === 'flesh') {
@@ -270,10 +319,9 @@ export class GuideController implements vscode.Disposable {
       expected: expectedOf(piece.text),
       eol,
       body: piece.text.replace(/(\r?\n)+$/, '').replace(/\r?\n/g, eol),
-      indent: doc.getText().slice(at.slotStart, at.slotEnd),
+      blank: blankLines(piece.text, eol),
       piece,
       index,
-      accepted: false,
       watched: false,
     };
     this.slot = slot;
@@ -290,8 +338,8 @@ export class GuideController implements vscode.Disposable {
     this.session.changed();
     this.placeCursor(slot);
     this.render();
+    this.slotChanged.fire();
     if (this.session.gear === 'watch') this.startTyping(slot);
-    else void vscode.commands.executeCommand('editor.action.inlineSuggest.trigger');
 
     return new Promise<PieceResult>((resolve) => {
       run.settle = resolve;
@@ -330,6 +378,7 @@ export class GuideController implements vscode.Disposable {
     if (this.slot) this.clearSlot();
     run.settle?.({ index: run.index, file: run.pieces[run.index]?.file ?? '', kind: run.pieces[run.index]?.kind ?? 'spine', status: 'skipped', detail: reason });
     this.run = null;
+    void this.quiet.restore();
   }
 
   // Watching the document -----------------------------------------------------------------------
@@ -353,51 +402,59 @@ export class GuideController implements vscode.Disposable {
         const newStart = Math.min(slot.start, start);
         slot.end = end > slot.end ? start + c.text.length : slot.end + delta;
         slot.start = newStart;
-        if (!ours && c.text.replace(/\s/g, '').length >= 4) slot.accepted = true;
       }
     }
     if (!ours && this.typing) void this.action('takeOver');
-    if (ours && !this.typing) return;
+    if (ours && !this.typing) {
+      this.render();
+      return;
+    }
     this.evaluate(slot);
   }
 
   private onSelection(e: vscode.TextEditorSelectionChangeEvent): void {
     const slot = this.slot;
+    this.updateKeys();
     if (!slot || e.textEditor.document !== slot.doc) return;
+    const line = e.selections[0].active.line;
+    if (slot.lastLine !== undefined && slot.lastLine !== line && !this.typing) void this.tidyLine(slot, slot.lastLine);
+    slot.lastLine = line;
     this.render();
-    const offset = slot.doc.offsetAt(e.selections[0].active);
-    if (offset >= slot.start && offset <= slot.end && e.kind === vscode.TextEditorSelectionChangeKind.Mouse) {
-      void vscode.commands.executeCommand('editor.action.inlineSuggest.trigger');
-    }
+  }
+
+  /**
+   * When the cursor leaves a planned line, drop brackets the editor closed by itself at its end if
+   * the line matches the plan without them: "if (x) {" leaves "if (x) {}" behind.
+   */
+  private async tidyLine(slot: Slot, docLine: number): Promise<void> {
+    const first = slot.doc.positionAt(slot.start).line;
+    const want = slot.expected.raw[docLine - first];
+    if (!want?.trim() || docLine >= slot.doc.lineCount) return;
+    const line = slot.doc.lineAt(docLine);
+    const extra = strayClosers(line.text, want);
+    if (!extra) return;
+    const end = slot.doc.offsetAt(line.range.end);
+    if (end > slot.end) return;
+    await this.edit(slot.doc, end - extra, end, '');
   }
 
   private onGear(gear: Gear): void {
+    void vscode.commands.executeCommand('setContext', 'senior.gear', gear);
     const slot = this.slot;
     if (!slot) return;
     if (gear === 'watch') this.startTyping(slot);
-    else {
-      this.stopTyping();
-      void this.refreshGhost();
-    }
+    else this.stopTyping();
     this.render();
-  }
-
-  /** Drop the suggestion the editor has cached (it was computed for the old gear) and ask again. */
-  private async refreshGhost(): Promise<void> {
-    await vscode.commands.executeCommand('editor.action.inlineSuggest.hide');
-    await vscode.commands.executeCommand('editor.action.inlineSuggest.trigger');
+    this.slotChanged.fire();
   }
 
   private evaluate(slot: Slot): void {
-    const editor = this.editorFor(slot);
-    const offset = editor ? slot.doc.offsetAt(editor.selection.active) : -1;
-    const { line, column } = this.cursorIn(slot, offset);
-    const state = progress(this.regionText(slot), slot.expected, line, column);
-    if (state.state === 'complete') {
-      void this.finish(slot, slot.watched ? 'watched' : slot.accepted ? 'accepted' : 'typed');
+    if (isComplete(this.regionText(slot), slot.expected)) {
+      void this.finish(slot, slot.watched ? 'watched' : 'typed');
       return;
     }
-    const divergence = state.state === 'diverged' ? { wrote: state.wrote, wanted: state.wanted } : undefined;
+    const wrong = this.view(slot).lines.find((l) => l.state === 'diverged');
+    const divergence = wrong ? { wrote: wrong.wrote ?? '', wanted: wrong.wanted ?? '' } : undefined;
     if (JSON.stringify(divergence) !== JSON.stringify(slot.divergence)) {
       slot.divergence = divergence;
       if (this.session.active) this.session.active = { ...this.session.active, ...(divergence ? { diverged: divergence } : { diverged: undefined }) };
@@ -413,33 +470,37 @@ export class GuideController implements vscode.Disposable {
     const speed = vscode.workspace.getConfiguration('senior').get<number>('watchSpeed', 40);
     const tick = 50;
     const perTick = Math.max(1, Math.round((speed * tick) / 1000));
-    const text = slot.body.slice(slot.indent.length);
-    let typed = 0;
     slot.watched = true;
     if (this.session.active) this.session.active = { ...this.session.active, watching: true };
     this.session.changed();
     void vscode.commands.executeCommand('setContext', 'senior.watching', true);
     let busy = false;
     const start = async () => {
-      if (this.regionText(slot) !== slot.indent) await this.replaceRegion(slot, slot.indent);
+      if (this.regionText(slot) !== slot.blank) await this.replaceRegion(slot, slot.blank);
       this.typing = setInterval(async () => {
         if (busy || this.slot !== slot) return;
         busy = true;
         try {
-          let chunk = text.slice(typed, typed + perTick);
-          // Never split a Windows line break across two edits.
-          if (chunk.endsWith('\r') && text[typed + chunk.length] === '\n') chunk += '\n';
-          typed += chunk.length;
-          await this.edit(slot.doc, slot.end, slot.end, chunk);
-          const editor = this.editorFor(slot);
-          if (editor) {
-            const end = slot.doc.positionAt(slot.end);
-            editor.selection = new vscode.Selection(end, end);
-            editor.revealRange(new vscode.Range(end, end), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-          }
-          if (typed >= text.length) {
+          // Type each planned line into its own empty line, top to bottom.
+          const written = this.regionText(slot).split(/\r?\n/);
+          const raw = slot.expected.raw;
+          let k = 0;
+          while (k < raw.length && written[k] === raw[k]) k++;
+          if (k >= raw.length || written[k] === undefined || !raw[k].startsWith(written[k])) {
             this.stopTyping();
             this.evaluate(slot);
+            return;
+          }
+          let offset = slot.start;
+          for (let j = 0; j < k; j++) offset += written[j].length + slot.eol.length;
+          offset += written[k].length;
+          const chunk = raw[k].slice(written[k].length, written[k].length + perTick);
+          await this.edit(slot.doc, offset, offset, chunk);
+          const editor = this.editorFor(slot);
+          if (editor) {
+            const end = slot.doc.positionAt(offset + chunk.length);
+            editor.selection = new vscode.Selection(end, end);
+            editor.revealRange(new vscode.Range(end, end), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
           }
         } finally {
           busy = false;
@@ -504,30 +565,78 @@ export class GuideController implements vscode.Disposable {
     return { line: breaks.length - 1, column: breaks[breaks.length - 1].length };
   }
 
+  /** Every line of the slot against the plan, with the cursor where the user is. */
+  private view(slot: Slot): { lines: LineView[]; cursorLine: number } {
+    const editor = this.editorFor(slot);
+    const offset = editor ? slot.doc.offsetAt(editor.selection.active) : -1;
+    const { line, column } = this.cursorIn(slot, offset);
+    return { lines: traceLines(this.regionText(slot), slot.expected, line, column), cursorLine: line };
+  }
+
+  /** The cursor goes to the end of the first planned line, after its indentation. */
   private placeCursor(slot: Slot): void {
     const editor = this.editorFor(slot);
     if (!editor) return;
-    const end = slot.doc.positionAt(slot.end);
+    const first = this.regionText(slot).split(/\r?\n/)[0] ?? '';
+    const end = slot.doc.positionAt(slot.start + first.length);
     editor.selection = new vscode.Selection(end, end);
+    slot.lastLine = end.line;
     editor.revealRange(new vscode.Range(end, end), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
   }
 
   private render(): void {
     const slot = this.slot;
     if (!slot) return;
+    this.updateKeys();
     const editor = this.editorFor(slot);
     if (!editor) return;
     const first = slot.doc.positionAt(slot.start).line;
     const last = slot.doc.positionAt(slot.end).line;
-    const cursor = editor.selection.active.line;
-    const hintLine = cursor >= first && cursor <= last ? cursor : last;
-    this.decorations.showSlot(editor, new vscode.Range(first, 0, last, 0), hintLine, this.session.gear, slot.divergence);
+    const { lines, cursorLine } = this.view(slot);
+    const paint: SlotPaint = { lines: new vscode.Range(first, 0, last, 0), traces: [], diverged: [] };
+    for (const l of lines) {
+      const docLine = first + l.line;
+      if (docLine >= slot.doc.lineCount) continue;
+      if (l.state === 'diverged') {
+        const text = slot.doc.lineAt(docLine).text;
+        const lead = text.length - text.trimStart().length;
+        paint.diverged.push({ range: new vscode.Range(docLine, lead, docLine, text.length), wanted: l.wanted ?? '' });
+      }
+      for (const part of l.trace) paint.traces.push({ at: new vscode.Position(docLine, part.column), text: part.text });
+    }
+    const hintLine = cursorLine >= 0 ? first + cursorLine : last;
+    const hint = this.hintText(slot);
+    if (hint && hintLine < slot.doc.lineCount) paint.hint = { at: slot.doc.lineAt(hintLine).range.end, text: hint };
+    this.decorations.showSlot(editor, paint);
+  }
+
+  private hintText(slot: Slot): string {
+    const gear = this.session.gear;
+    if (gear === 'watch') return 'Senior is typing · Esc to take over';
+    if (gear === 'accept') return 'Tab accepts this piece';
+    return slot.piece.notice ?? '';
+  }
+
+  /** `senior.inSlot` lets Enter go to the next planned line only while the cursor is in a piece. */
+  private updateKeys(): void {
+    const slot = this.slot;
+    const editor = vscode.window.activeTextEditor;
+    let inside = false;
+    if (slot && editor && editor.document === slot.doc) {
+      const offset = slot.doc.offsetAt(editor.selection.active);
+      inside = offset >= slot.start && offset <= slot.end;
+    }
+    if (inside === this.inSlotKey) return;
+    this.inSlotKey = inside;
+    void vscode.commands.executeCommand('setContext', 'senior.inSlot', inside);
   }
 
   private clearSlot(): void {
     this.stopTyping();
     this.slot = null;
     this.decorations.clear();
+    this.updateKeys();
+    this.slotChanged.fire();
   }
 
   /**

@@ -4,8 +4,8 @@ import type { ActivePiece, Activity, Gear, PanelState, Stats } from '../src/pane
 import { send } from './vscode.ts';
 
 const GEARS: { gear: Gear; label: string; hint: string }[] = [
-  { gear: 'type', label: 'Type', hint: 'You write the important lines. Ghost text shows the rest of each line.' },
-  { gear: 'accept', label: 'Accept', hint: 'The whole piece shows as ghost text. Tab accepts it while you read why.' },
+  { gear: 'type', label: 'Type', hint: 'You write the important lines over the plan, which is traced on every line of the piece.' },
+  { gear: 'accept', label: 'Accept', hint: 'The plan is traced on every line of the piece. Tab accepts it while you read why.' },
   { gear: 'watch', label: 'Watch', hint: 'Senior types at reading speed. Escape hands it back to you.' },
 ];
 

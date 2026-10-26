@@ -1,7 +1,7 @@
 {
   "name": "senior",
   "displayName": "Senior: a senior developer beside you",
-  "description": "Write the important lines yourself while a senior developer explains why. Ghost text for the logic, the boilerplate filled in, and every decision remembered.",
+  "description": "Write the important lines yourself while a senior developer explains why. The plan traced in your editor for the logic, the boilerplate filled in, and every decision remembered.",
   "version": "0.1.0",
   "publisher": "swagatpatel",
   "license": "MIT",
@@ -103,6 +103,21 @@
         "category": "Senior"
       },
       {
+        "command": "senior.acceptPiece",
+        "title": "Accept this piece as planned",
+        "category": "Senior"
+      },
+      {
+        "command": "senior.whyPiece",
+        "title": "Why is this piece here?",
+        "category": "Senior"
+      },
+      {
+        "command": "senior.nextLine",
+        "title": "Go to the next line of the piece",
+        "category": "Senior"
+      },
+      {
         "command": "senior.pickDecision",
         "title": "Show the decisions linked to this file",
         "category": "Senior"
@@ -149,6 +164,16 @@
         "command": "senior.takeOver",
         "key": "escape",
         "when": "editorTextFocus && senior.watching"
+      },
+      {
+        "command": "senior.nextLine",
+        "key": "enter",
+        "when": "editorTextFocus && senior.inSlot && !editorReadonly && !editorHasMultipleSelections && !suggestWidgetVisible"
+      },
+      {
+        "command": "senior.acceptPiece",
+        "key": "tab",
+        "when": "editorTextFocus && senior.inSlot && senior.gear == 'accept' && !suggestWidgetVisible && !inlineSuggestionVisible && !inSnippetMode"
       }
     ],
     "configuration": {
@@ -162,8 +187,8 @@
             "watch"
           ],
           "enumDescriptions": [
-            "You type the important lines. The ghost text shows the rest of each line.",
-            "The whole piece shows as ghost text. Press Tab to accept it while you read why.",
+            "You type the important lines over the plan, which is traced on every line of the piece.",
+            "The plan is traced on every line of the piece. Press Tab to accept it while you read why.",
             "Senior types the piece at reading speed. Press Escape to take over."
           ],
           "default": "type",
@@ -180,6 +205,11 @@
           "type": "boolean",
           "default": false,
           "description": "Read narration aloud with your system voice."
+        },
+        "senior.quietOtherGhostText": {
+          "type": "boolean",
+          "default": true,
+          "description": "While you write a piece, turn off ghost text from other extensions, such as GitHub Copilot, so it never sits beside Senior's plan. Senior turns off editor.inlineSuggest.enabled in your user settings for that time and puts your setting back afterwards."
         },
         "senior.decisionLenses": {
           "type": "boolean",
@@ -205,6 +235,15 @@
           "dark": "#B59A5B99",
           "light": "#8C7440AA",
           "highContrast": "#FFD000"
+        }
+      },
+      {
+        "id": "senior.traceForeground",
+        "description": "The plan traced on the lines you are writing.",
+        "defaults": {
+          "dark": "#8F7C55",
+          "light": "#A8915E",
+          "highContrast": "#C9AE6E"
         }
       },
       {
@@ -252,6 +291,10 @@
         },
         {
           "command": "senior.decisionWhy",
+          "when": "false"
+        },
+        {
+          "command": "senior.nextLine",
           "when": "false"
         }
       ]

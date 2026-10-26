@@ -1,5 +1,5 @@
 // Pure text logic for guided pieces: where a piece goes, whether what the user typed matches it,
-// and what ghost text to show next. Nothing here touches VS Code, so it is tested with plain Node.
+// and what tracing text to show on each line. Nothing here touches VS Code, so it is tested with plain Node.
 
 export type Where = 'after' | 'before' | 'replace' | 'start' | 'end' | 'new_file';
 export type PieceKind = 'spine' | 'flesh' | 'probe';
@@ -77,15 +77,22 @@ function lineEnd(text: string, offset: number): number {
 }
 
 /**
+ * The empty lines a handwritten piece starts as: one per planned line, each holding only that
+ * line's indentation. The user writes over them while the plan is traced on top.
+ */
+export function blankLines(text: string, eol: string): string {
+  return lines(text.replace(/(\r?\n)+$/, '')).map(indentOf).join(eol);
+}
+
+/**
  * Where a piece goes in the current text, and what to insert there.
- * Flesh pieces insert their full text. Spine and probe pieces insert an empty "slot" line with the
- * first line's indentation, which the user then writes into; `slotStart..slotEnd` is that slot.
+ * Flesh pieces insert their full text. Spine and probe pieces insert a "slot" of empty lines, one
+ * per planned line, which the user then writes into; `slotStart..slotEnd` is that slot.
  */
 export function locate(text: string, piece: Piece, eol: string): Located {
   const body = piece.text.replace(/(\r?\n)+$/, '').replace(/\r?\n/g, eol);
   const handwritten = piece.kind !== 'flesh';
-  const slot = handwritten ? indentOf(lines(piece.text)[0] ?? '') : '';
-  const content = handwritten ? slot : body;
+  const content = handwritten ? blankLines(piece.text, eol) : body;
 
   const insertLines = (offset: number, leading: string, trailing: string): Located => ({
     ok: true,
@@ -206,18 +213,106 @@ export function remainder(expectedLine: string, typed: string): string | null {
   return want.slice(i);
 }
 
+/** Characters an editor closes by itself: brackets and quotes. */
+const AUTO_CLOSED = /[\s)\]}>'"`]*$/;
+
 /**
- * Ghost text for the cursor: the rest of the current line, and in the accept gear every line after it.
- * `typed` is the text before the cursor on its line.
+ * How many characters at the end of a line to drop so that it matches the planned line, when
+ * those characters are only brackets or quotes the editor closed by itself. Typing "if (x) {"
+ * leaves "if (x) {}" behind; the plan puts the "}" on a later line. Returns 0 when nothing should go.
  */
-export function ghostText(expected: Expected, k: number, typed: string, gear: 'type' | 'accept' | 'watch', eol = '\n'): string | null {
-  if (k >= expected.content.length) return null;
-  const lineIndex = expected.content[k];
-  const rest = remainder(expected.raw[lineIndex], typed);
-  if (rest === null) return null;
-  if (gear !== 'accept') return rest;
-  const after = expected.raw.slice(lineIndex + 1);
-  return after.length ? `${rest}${eol}${after.join(eol)}` : rest;
+export function strayClosers(text: string, want: string): number {
+  if (squash(text) === squash(want)) return 0;
+  const from = AUTO_CLOSED.exec(text)?.index ?? text.length;
+  for (let cut = text.length - 1; cut >= from; cut--) {
+    if (squash(text.slice(0, cut)) === squash(want)) return text.length - cut;
+  }
+  return 0;
+}
+
+/** Every planned line is written, once characters the editor closed by itself are set aside. */
+export function isComplete(region: string, expected: Expected): boolean {
+  const cleaned = lines(region).map((line, r) => {
+    const want = expected.raw[r];
+    if (!want?.trim()) return line;
+    const extra = strayClosers(line, want);
+    return extra ? line.slice(0, line.length - extra) : line;
+  });
+  return progress(cleaned.join('\n'), expected, -1).state === 'complete';
+}
+
+/** Text to draw at a column of a line. */
+export interface TracePart {
+  column: number;
+  text: string;
+}
+
+export interface LineView {
+  /** The line within the slot. */
+  line: number;
+  state: 'empty' | 'writing' | 'done' | 'diverged' | 'extra';
+  /** The faint text still to type on this line, placed around what is already there. */
+  trace: TracePart[];
+  wrote?: string;
+  wanted?: string;
+}
+
+/**
+ * Place `rest` around `after`, the text already to the right of where it starts: characters the
+ * editor closed by itself, such as the ")" after "foo(". Each character of `after` uses up the same
+ * character of `rest`, and the parts between are drawn in the gaps. Columns count from the start of
+ * `after`. Returns null when `after` holds something the plan does not have there.
+ */
+export function splitTrace(rest: string, after: string): TracePart[] | null {
+  const parts: TracePart[] = [];
+  let i = 0;
+  for (let p = 0; p < after.length; p++) {
+    const c = after[p];
+    if (/\s/.test(c)) continue;
+    const at = rest.indexOf(c, i);
+    if (at < 0) return null;
+    if (at > i) parts.push({ column: p, text: rest.slice(i, at) });
+    i = at + 1;
+  }
+  if (i < rest.length) parts.push({ column: after.length, text: rest.slice(i) });
+  return parts;
+}
+
+/**
+ * The tracing text for every line of the slot. Line r of the slot carries planned line r. On the
+ * cursor's line only the text before the cursor counts as written, so the rest of the plan is drawn
+ * at the cursor. Elsewhere, brackets the editor closed by itself at the end of a line are allowed.
+ * `cursorLine` is -1 when the cursor is outside the slot.
+ */
+export function traceLines(region: string, expected: Expected, cursorLine: number, cursorColumn: number): LineView[] {
+  return lines(region).map((text, line): LineView => {
+    const want = expected.raw[line];
+    const closersOnly = CLOSERS.test(text);
+    if (want === undefined || !want.trim()) {
+      if (closersOnly) return { line, state: want === undefined ? 'extra' : 'done', trace: [] };
+      return { line, state: 'diverged', trace: [], wrote: text.trim(), wanted: want === undefined ? '(nothing more)' : '(an empty line)' };
+    }
+    if (squash(text) === squash(want)) return { line, state: 'done', trace: [] };
+    const state = text.trim() ? 'writing' : 'empty';
+
+    if (line === cursorLine) {
+      const typed = text.slice(0, cursorColumn);
+      const rest = remainder(want, typed);
+      if (rest === null) return { line, state: 'diverged', trace: [], wrote: typed.trim(), wanted: want.trim() };
+      const parts = splitTrace(rest, text.slice(cursorColumn)) ?? [];
+      return { line, state, trace: parts.map((p) => ({ column: cursorColumn + p.column, text: p.text })) };
+    }
+
+    // A closing line the editor added below the cursor is not a mistake.
+    if (cursorLine >= 0 && line > cursorLine && closersOnly && text.trim()) return { line, state: 'extra', trace: [] };
+    const from = AUTO_CLOSED.exec(text)?.index ?? text.length;
+    for (let cut = text.length; cut >= from; cut--) {
+      const rest = remainder(want, text.slice(0, cut));
+      const parts = rest === null ? null : splitTrace(rest, text.slice(cut));
+      if (parts) return { line, state, trace: parts.map((p) => ({ column: cut + p.column, text: p.text })) };
+    }
+    return { line, state: 'diverged', trace: [], wrote: text.trim(), wanted: want.trim() };
+  });
 }
 
 /** How many lines of a piece a person actually has to write. */

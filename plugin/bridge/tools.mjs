@@ -61,7 +61,7 @@ export const TOOLS = [
     name: 'guide',
     description: [
       'Guide the user through writing code in their own editor, one piece at a time.',
-      'Spine pieces carry the logic and the decisions: the user writes them, with your text shown as ghost text at their cursor.',
+      'Spine pieces carry the logic and the decisions: the user writes them over your text, which is traced on one empty line per planned line.',
       'Flesh pieces are imports, boilerplate and repeated setup: the editor fills them in with a one-line note.',
       'Probe pieces are temporary debugging lines that test a guess; put what the user should see in expect.',
       'Keep each spine piece to one idea and at most about 8 lines. Pieces run in order, and each anchor is looked up after the earlier pieces are applied.',
@@ -158,4 +158,4 @@ export const TOOLS = [
 ];
 
 export const INSTRUCTIONS =
-  'These tools drive the Senior panel and ghost text in the user\'s editor during /senior:pair, and show replays during /senior:replay. The user writes the spine of the code by hand; flesh is filled in for them. ' + questionsNote;
+  'These tools drive the Senior panel and the traced plan in the user\'s editor during /senior:pair, and show replays during /senior:replay. The user writes the spine of the code by hand; flesh is filled in for them. ' + questionsNote;

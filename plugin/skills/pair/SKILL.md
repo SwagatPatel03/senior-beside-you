@@ -1,6 +1,6 @@
 ---
 name: pair
-description: Pair-program with the user in their own editor. The user writes the spine of the code (the logic and decisions) by hand with ghost text to follow, the boilerplate is filled in for them, each step is checked by running it, and every decision is remembered. While the user types one step, a navigator prepares the next, so there is no waiting between steps. Use when the user wants to build something hands-on, says /senior:pair, or asks to continue a feature plan.
+description: Pair-program with the user in their own editor. The user writes the spine of the code (the logic and decisions) by hand over a traced plan, the boilerplate is filled in for them, each step is checked by running it, and every decision is remembered. While the user types one step, a navigator prepares the next, so there is no waiting between steps. Use when the user wants to build something hands-on, says /senior:pair, or asks to continue a feature plan.
 argument-hint: <what to build, or "continue <feature>">
 allowed-tools:
   - Bash(node "${CLAUDE_PLUGIN_ROOT}/cli/senior.mjs" *)

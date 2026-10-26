@@ -4,13 +4,13 @@
 
 You write the lines that carry the logic. Senior fills in the routine code around them, explains each decision at the moment it matters, and remembers why it was made. You keep your speed, and you understand every line you ship.
 
-Senior works with [Claude Code](https://claude.com/claude-code). Claude Code does the thinking: it plans each step, writes the code and runs the checks. Senior is how that work reaches you. It arrives as ghost text in your editor, with a short reason for every piece and a journal you can scroll back through.
+Senior works with [Claude Code](https://claude.com/claude-code). Claude Code does the thinking: it plans each step, writes the code and runs the checks. Senior is how that work reaches you. It arrives as a plan traced on the lines of your file, with a short reason for every piece and a journal you can scroll back through.
 
 ## How a step feels
 
 1. The senior introduces the step in a sentence or two the moment it starts. With **Read aloud** on, your computer's voice says it too.
 2. The routine parts, such as imports and error messages, appear in your file on their own.
-3. For the lines that matter, Senior shows the code as ghost text and you type it. The panel tells you why the piece exists while you write it, and what detail to notice in it.
+3. For the lines that matter, Senior opens one empty line for each line of the piece and traces the plan on them in a faint brass colour. You type over it, and Enter takes you to the next planned line. A line above the piece says what it is for, with **Why?**, **Fill in** and **Skip**, and the panel tells you what detail to notice in it.
 4. Claude Code runs the check it named before you started, and the panel shows whether the result was the one expected.
 5. The step ends with what was verified, what was not, and one takeaway worth remembering. The next step opens in the same moment.
 
@@ -40,15 +40,21 @@ A decision shows above the first definition of each symbol linked to it. A decis
 
 | Gear | What happens | When it helps |
 | --- | --- | --- |
-| **Type** | You type the important lines. Ghost text shows the rest of each line. | You want to learn the code by writing it. |
-| **Accept** | The whole piece shows as ghost text, and Tab accepts it while you read why. | You understand the idea and want to move faster. |
+| **Type** | You type the important lines over the traced plan. | You want to learn the code by writing it. |
+| **Accept** | The plan is traced the same way, and Tab accepts the whole piece while you read why. | You understand the idea and want to move faster. |
 | **Watch** | Senior types the piece at reading speed, and Escape hands it back to you. | The code is new to you and you want to see it built first. |
 
 You can change gear at any time from the panel, from the status bar, or with Ctrl+Alt+G. The change applies to the piece you are on.
 
 ## When your line differs from the plan
 
-Senior notices when what you typed is different from the plan. It never overwrites your code. You can keep your version, and Claude Code adapts the rest of the step to it, or you can ask to see the plan again.
+Senior notices when what you typed is different from the plan. The line gets a dotted underline and a note that shows what the plan has. Senior never overwrites your code. You can keep your version, and Claude Code adapts the rest of the step to it, or you can ask to see the plan again.
+
+## Senior and other suggestions
+
+Senior's plan is drawn in its own colour and does not use VS Code's inline suggestions, so IntelliSense can never hide it or be mistaken for it. The IntelliSense popup keeps working as usual, and Tab and Enter still accept its suggestions while it is open.
+
+Ghost text from other extensions, such as GitHub Copilot, would appear on the same lines as the plan. While you write a piece, Senior turns off `editor.inlineSuggest.enabled` in your user settings, and it puts your setting back when the guide ends. If VS Code closes in the middle of a piece, Senior puts the setting back the next time it starts. To keep other ghost text on, turn off **Senior: Quiet Other Ghost Text** in the settings.
 
 ## When something fails
 
@@ -120,7 +126,8 @@ The colours of the slot you are writing in, the hints and the highlights follow 
 ## Troubleshooting
 
 - **The panel says "Waiting for Claude Code".** Claude Code must run in the window's folder or in a folder inside it. Run `claude plugin list` to check that the senior plugin is installed and enabled.
-- **The ghost text does not appear.** Check that `editor.inlineSuggest.enabled` is on. Other extensions that show inline suggestions, such as GitHub Copilot, can take the place of Senior's ghost text, so pause them while you pair.
+- **The line above the piece does not appear.** It is a CodeLens, so check that `editor.codeLens` is on. The panel shows the same piece, and the Fill in and Skip commands are in the Command Palette.
+- **Other ghost text stayed off after a session.** Senior puts `editor.inlineSuggest.enabled` back when a guide ends and again when VS Code starts. If you changed that setting yourself during a piece, Senior keeps your choice.
 - **Several VS Code windows are open.** Senior connects Claude Code to the window whose folder contains the folder Claude Code is working in.
 - **There is no Read aloud switch.** Senior found no voice on this computer. On Linux, install `speech-dispatcher` (for `spd-say`) or `espeak`, then reload the window.
 

@@ -1,11 +1,19 @@
-// How a guided piece looks in the editor: a quiet bar beside the lines being written, a hint at the
-// end of the current line, and a short-lived highlight on code Senior filled in.
+// How a guided piece looks in the editor: a quiet bar beside the lines being written, the plan traced
+// on them in Senior's own colour, a hint at the end of the current line, and a short-lived highlight on
+// code Senior filled in.
 
 import * as vscode from 'vscode';
-import type { Divergence, Gear } from '../panel/protocol.ts';
 
 const FILLED_FOR_MS = 1800;
 const EVIDENCE_FOR_MS = 30_000;
+
+/** Everything drawn for the slot being written, already placed in the document. */
+export interface SlotPaint {
+  lines: vscode.Range;
+  traces: { at: vscode.Position; text: string }[];
+  diverged: { range: vscode.Range; wanted: string }[];
+  hint?: { at: vscode.Position; text: string };
+}
 
 export class Decorations implements vscode.Disposable {
   private readonly slot = vscode.window.createTextEditorDecorationType({
@@ -18,9 +26,13 @@ export class Decorations implements vscode.Disposable {
     overviewRulerLane: vscode.OverviewRulerLane.Left,
   });
 
+  // Created before the hint, so at the same spot the plan comes first and the hint after it.
+  private readonly trace = vscode.window.createTextEditorDecorationType({
+    after: { color: new vscode.ThemeColor('senior.traceForeground') },
+  });
+
   private readonly hint = vscode.window.createTextEditorDecorationType({
     after: { color: new vscode.ThemeColor('senior.hintForeground'), margin: '0 0 0 2.5em', fontStyle: 'italic' },
-    rangeBehavior: vscode.DecorationRangeBehavior.ClosedOpen,
   });
 
   private readonly diverged = vscode.window.createTextEditorDecorationType({
@@ -58,18 +70,20 @@ export class Decorations implements vscode.Disposable {
     for (const e of vscode.window.visibleTextEditors) e.setDecorations(this.evidence, []);
   }
 
-  showSlot(editor: vscode.TextEditor, lines: vscode.Range, cursorLine: number, gear: Gear, divergence?: Divergence): void {
-    editor.setDecorations(this.slot, [lines]);
-    const end = editor.document.lineAt(Math.min(cursorLine, editor.document.lineCount - 1)).range.end;
-    if (divergence) {
-      editor.setDecorations(this.hint, []);
-      editor.setDecorations(this.diverged, [
-        { range: new vscode.Range(end, end), renderOptions: { after: { contentText: `differs from the plan, which has: ${clip(divergence.wanted)}` } } },
-      ]);
-      return;
-    }
-    editor.setDecorations(this.diverged, []);
-    editor.setDecorations(this.hint, [{ range: new vscode.Range(end, end), renderOptions: { after: { contentText: hintFor(gear) } } }]);
+  showSlot(editor: vscode.TextEditor, paint: SlotPaint): void {
+    const tab = typeof editor.options.tabSize === 'number' ? editor.options.tabSize : 4;
+    editor.setDecorations(this.slot, [paint.lines]);
+    editor.setDecorations(
+      this.trace,
+      paint.traces.map((t) => ({ range: new vscode.Range(t.at, t.at), renderOptions: { after: { contentText: visible(t.text, tab) } } })),
+    );
+    editor.setDecorations(
+      this.diverged,
+      paint.diverged.map((d) => ({ range: d.range, renderOptions: { after: { contentText: `differs from the plan, which has: ${clip(d.wanted)}` } } })),
+    );
+    const hint = paint.hint;
+    const clash = hint && paint.diverged.some((d) => d.range.end.line === hint.at.line);
+    editor.setDecorations(this.hint, hint && !clash ? [{ range: new vscode.Range(hint.at, hint.at), renderOptions: { after: { contentText: hint.text } } }] : []);
   }
 
   flashFilled(editor: vscode.TextEditor, range: vscode.Range): void {
@@ -81,6 +95,7 @@ export class Decorations implements vscode.Disposable {
   clear(editor?: vscode.TextEditor): void {
     for (const e of editor ? [editor] : vscode.window.visibleTextEditors) {
       e.setDecorations(this.slot, []);
+      e.setDecorations(this.trace, []);
       e.setDecorations(this.hint, []);
       e.setDecorations(this.diverged, []);
     }
@@ -91,17 +106,16 @@ export class Decorations implements vscode.Disposable {
     clearTimeout(this.evidenceTimer);
     this.evidence.dispose();
     this.slot.dispose();
+    this.trace.dispose();
     this.hint.dispose();
     this.diverged.dispose();
     this.filled.dispose();
   }
 }
 
-function hintFor(gear: Gear): string {
-  const why = process.platform === 'darwin' ? '⌘⌥/ asks why' : 'Ctrl+Alt+/ asks why';
-  if (gear === 'accept') return `Tab accepts this piece · ${why}`;
-  if (gear === 'watch') return 'Senior is typing · Esc to take over';
-  return `write this line · ${why}`;
+/** Decoration text collapses runs of spaces, so spacing is drawn with no-break spaces. */
+function visible(text: string, tab: number): string {
+  return text.replace(/\t/g, ' '.repeat(tab)).replace(/ /g, ' ');
 }
 
 function clip(text: string): string {

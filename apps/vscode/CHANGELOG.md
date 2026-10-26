@@ -5,6 +5,11 @@
 - Decisions in the code. Each ledger decision shows as a line above the code it is about, with **Why?** for a card with the whole decision and **Full record** for every detail in the Senior panel, including its history and the stored JSON. The status bar counts the decisions linked to the open file. The new setting `senior.decisionLenses` turns the lines off.
 - "About this line" has a **Full record** link for each decision it names.
 
+- The plan for a piece you write is traced on its own lines in Senior's colour, so you see the whole piece before you start. It replaces the ghost text, so IntelliSense can no longer hide the plan or be mistaken for it.
+- A line above the piece says which piece it is and what it is for, with Why?, Fill in and Skip.
+- Enter takes you to the next planned line, and brackets the editor closed by itself are tidied away.
+- While you write a piece, ghost text from other extensions, such as GitHub Copilot, is turned off, and your setting comes back afterwards. The new setting `senior.quietOtherGhostText` turns this off.
+
 ## 0.1.0 (2026-10-23)
 
 The first release.

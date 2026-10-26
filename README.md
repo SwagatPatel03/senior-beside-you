@@ -14,7 +14,7 @@ The design behind it is in [docs/architectures.md](docs/architectures.md).
 | Part | What it is | Where |
 | --- | --- | --- |
 | **The senior plugin for Claude Code** | Design sessions, a decision ledger with callbacks, a regret library of known failures, narration rules, onboarding for large repos, the project story, pairing in your editor, and a fast lane whose work you can replay afterwards. | [`plugin/`](plugin) |
-| **Senior for VS Code** | The editor side of pairing: ghost text for the lines you write, routine code filled in, three gears for how hands-on you want to be, a journal of the session, and a viewer for replays. | [`apps/vscode/`](apps/vscode) |
+| **Senior for VS Code** | The editor side of pairing: the plan traced on the lines you write, routine code filled in, three gears for how hands-on you want to be, a journal of the session, and a viewer for replays. | [`apps/vscode/`](apps/vscode) |
 
 The plugin works on its own in any terminal. The extension needs the plugin, because Claude Code does the thinking and the extension is how it reaches your editor.
 
@@ -48,7 +48,7 @@ Open your project and start Claude Code in its folder. Then:
 | Command | What it does |
 | --- | --- |
 | `/senior:design <feature>` | Before code: asks the two or three questions that change the design, names the three things most likely to hurt later, confirms examples that become the first tests, sorts decisions into one-way and two-way, records them, and saves a step-by-step plan. |
-| `/senior:pair <feature>` | Builds the plan with you in VS Code. You type the important lines from ghost text, the routine code is filled in, each step is checked by running it, and each decision is linked to the code that carries it out. While you type one step, a navigator prepares the next in the background, so there is no wait between steps. Runs the design session first if there is no plan. Use `/senior:pair continue <feature>` to pick up a plan. |
+| `/senior:pair <feature>` | Builds the plan with you in VS Code. You type the important lines over a plan traced in your file, the routine code is filled in, each step is checked by running it, and each decision is linked to the code that carries it out. While you type one step, a navigator prepares the next in the background, so there is no wait between steps. Runs the design session first if there is no plan. Use `/senior:pair continue <feature>` to pick up a plan. |
 | `/senior:fast <task>` | The fast lane for deadline days. One quick pushback when the task as asked breaks a recorded decision or walks into a known failure, then full speed. Every edit and command is recorded with the reason given for it. |
 | `/senior:replay` | Turns the last session into a replay of three to eight scenes, and walks you through it in the Senior panel or in the terminal. You can stop on any scene and ask why. |
 | `/senior:why <question>` | Answers "why is it like this?" from the decision ledger, then carries on. |
@@ -85,7 +85,7 @@ Claude Code ── senior plugin ── editor bridge (MCP, stdio)
                                       │
                                       │  HTTP on 127.0.0.1, random port, per-window token
                                       ▼
-                         VS Code ── Senior extension ── ghost text, panel, journal
+                         VS Code ── Senior extension ── traced plan, panel, journal
 ```
 
 Each VS Code window with the extension writes a lock file to `~/.senior/ide/` with its port and a random token, readable only by your user. The bridge picks the window whose folder contains the folder Claude Code is working in. The extension refuses requests without the token and every request that comes from a web page. Neither part sends anything over the internet; Claude Code does the model work under your own account.
@@ -146,7 +146,7 @@ The integration tests download VS Code into `apps/vscode/.vscode-test/` the firs
 
 - **Destructive commands** are discouraged by the senior's rules, which are only instructions. Turn on Claude Code's sandbox (`/sandbox`) and keep production credentials out of the project.
 - **Mechanical checks** such as secret scanning and "a fix's test must fail without the fix" are asked for by the narration rules, not enforced by code.
-- **Other inline suggestion extensions**, such as GitHub Copilot, can take the place of Senior's ghost text while you pair. Pause them during a session.
+- **Other inline suggestion extensions**, such as GitHub Copilot, are quieted while you write a piece by turning off `editor.inlineSuggest.enabled` in your user settings for that time. VS Code has no way to hide another extension's suggestions for only a few lines. Settings Sync can copy that temporary change to other machines, and other open VS Code windows lose ghost text for that time too.
 
 ## Regret library sources
 

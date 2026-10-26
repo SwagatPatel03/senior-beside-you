@@ -79,30 +79,49 @@ test('flesh fills itself in, and a spine piece typed by hand completes despite a
   assert.equal(api.session.stats.typed, 3);
 });
 
-test('ghost text shows the rest of the line, and the whole piece in the accept gear', async () => {
-  const pending = call('guide', { pieces: [{ file: 'src/ghost.js', kind: 'spine', where: 'new_file', text: 'const a = 1;\nconst b = 2;', why: 'Two constants.' }] });
+test('the whole plan is traced on its own lines, Enter goes to the next planned line, and other ghost text is quiet meanwhile', async () => {
+  const setting = () => vscode.workspace.getConfiguration('editor').inspect('inlineSuggest.enabled').globalValue;
+  const before = setting();
+  const pending = call('guide', { pieces: [{ file: 'src/trace.js', kind: 'spine', where: 'new_file', text: 'if (ready) {\n  start();\n}', why: 'Start once ready.' }] });
   await until(() => api.session.active, 'the piece');
   const editor = vscode.window.activeTextEditor;
-  assert.equal(api.guide.ghostAt(editor.document, editor.selection.active).insertText, 'const a = 1;');
-  await typeLikeAPerson('const a', { untilDone: false });
-  assert.equal(api.guide.ghostAt(editor.document, editor.selection.active).insertText, 'const a = 1;');
+  assert.equal(editor.document.getText().replace(/\r\n/g, '\n'), '\n  \n\n', 'one empty line per planned line');
+  assert.deepEqual(api.guide.inspect().lines.map((l) => l.trace.map((t) => t.text).join('')), ['if (ready) {', 'start();', '}']);
+  await until(() => setting() === false, 'other ghost text to be turned off');
 
+  await typeLikeAPerson('if (ready) {', { untilDone: false });
+  // The editor closed the brace by itself. Enter goes to the planned line below, and the stray brace goes.
+  await vscode.commands.executeCommand('senior.nextLine');
+  await until(() => editor.document.lineAt(0).text === 'if (ready) {', 'the stray brace to go');
+  assert.equal(editor.selection.active.line, 1);
+  assert.equal(editor.document.lineCount, 4, 'Enter made no new line');
+
+  // After "start(" the editor adds ")" by itself; the plan's ";" is traced after it.
+  // "(" would accept whatever IntelliSense offers for "start", so close its popup first, as a person would.
+  await typeLikeAPerson('start', { untilDone: false });
+  await vscode.commands.executeCommand('hideSuggestWidget');
+  await typeLikeAPerson('(', { untilDone: false });
+  assert.equal(editor.document.lineAt(1).text, '  start()');
+  assert.deepEqual(api.guide.inspect().lines[1].trace, [{ column: 9, text: ';' }]);
+  await typeLikeAPerson(');', { untilDone: false });
+  await vscode.commands.executeCommand('senior.nextLine');
+  await typeLikeAPerson('}');
+  const { result } = await pending;
+  assert.equal(result.results[0].status, 'typed');
+  assert.equal(read('src/trace.js'), 'if (ready) {\n  start();\n}\n');
+  await until(() => setting() === before, 'the user\'s own setting to come back');
+});
+
+test('in the accept gear, Tab takes the whole piece as planned', async () => {
   await api.session.setGear('accept');
-  assert.equal(api.guide.ghostAt(editor.document, editor.selection.active).insertText, 'const a = 1;\nconst b = 2;');
-
-  // Accept the suggestion the way Tab does. If the test window does not show it, insert it as Tab would.
-  await vscode.commands.executeCommand('editor.action.inlineSuggest.trigger');
-  await sleep(400);
-  await vscode.commands.executeCommand('editor.action.inlineSuggest.commit');
-  await sleep(300);
-  if (api.session.active) {
-    const ghost = api.guide.ghostAt(editor.document, editor.selection.active);
-    await editor.edit((b) => b.replace(ghost.range, ghost.insertText));
-  }
+  const pending = call('guide', { pieces: [{ file: 'src/accept.js', kind: 'spine', where: 'new_file', text: 'const a = 1;\nconst b = 2;', why: 'Two constants.' }] });
+  await until(() => api.session.active, 'the piece');
+  await typeLikeAPerson('const a', { untilDone: false });
+  assert.deepEqual(api.guide.inspect().lines.map((l) => l.trace.map((t) => t.text).join('')), [' = 1;', 'const b = 2;']);
+  await vscode.commands.executeCommand('senior.acceptPiece');
   const { result } = await pending;
   assert.equal(result.results[0].status, 'accepted');
-  assert.equal(read('src/ghost.js'), 'const a = 1;\nconst b = 2;\n');
-  await api.session.setGear('type');
+  assert.equal(read('src/accept.js'), 'const a = 1;\nconst b = 2;\n');
 });
 
 test('a line that differs from the plan is flagged, and the user can keep their own version', async () => {

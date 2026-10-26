@@ -8,7 +8,8 @@ import { BridgeServer } from './bridge/server.ts';
 import { DecisionLenses } from './decisions/controller.ts';
 import { GuideController } from './guide/controller.ts';
 import { Decorations } from './guide/decorations.ts';
-import { GhostTextProvider } from './guide/inline.ts';
+import { PieceLens } from './guide/lens.ts';
+import { QuietOthers } from './guide/quiet.ts';
 import type { DecisionView, FromPanel, Gear, JournalEntry } from './panel/protocol.ts';
 import { PanelProvider } from './panel/provider.ts';
 import { REPLAY_SCHEME, ReplayController } from './replay/controller.ts';
@@ -49,7 +50,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
     if (session.readAloud) void voice.say(text);
   };
   const decorations = new Decorations();
-  const guide = new GuideController(session, decorations, root);
+  const quiet = new QuietOthers(context.globalState);
+  // A window that closed in the middle of a piece may have left other ghost text turned off.
+  void quiet.restore();
+  const guide = new GuideController(session, decorations, quiet, root);
+  const lens = new PieceLens(guide);
   const replays = new ReplayController(session, root, () => panel.reveal(), readAloud);
   const handlers = new BridgeHandlers(session, guide, replays, root, (dir) => {
     if (dir) projectDir = dir;
@@ -99,11 +104,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
     }
   }
 
-  function whereIn(editor: vscode.TextEditor): string {
+  function whereIn(editor: vscode.TextEditor, at?: number): string {
     const r = root();
     const file = r ? path.relative(r, editor.document.uri.fsPath).replace(/\\/g, '/') : editor.document.fileName;
-    const line = editor.selection.active.line;
-    const code = editor.selection.isEmpty ? editor.document.lineAt(line).text.trim() : editor.document.getText(editor.selection).trim();
+    const line = at ?? editor.selection.active.line;
+    const code = at !== undefined || editor.selection.isEmpty ? editor.document.lineAt(line).text.trim() : editor.document.getText(editor.selection).trim();
     return `${file}:${line + 1}${code ? `: ${code.slice(0, 300)}` : ''}`;
   }
 
@@ -129,8 +134,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
     panel.reveal();
   }
 
-  function explain(editor: vscode.TextEditor): Omit<Extract<JournalEntry, { kind: 'explain' }>, 'id' | 'at' | 'kind' | 'where'> | null {
-    const line = editor.selection.active.line;
+  /** "Why?" on the line above a piece: the same answer, for the piece being written. */
+  async function whyThisPiece(): Promise<void> {
+    const at = guide.slotLine();
+    const editor = at && vscode.window.visibleTextEditors.find((e) => e.document === at.document);
+    const known = editor && at ? explain(editor, at.line) : null;
+    if (!editor || !at || !known) return whyThisLine();
+    session.add({ kind: 'explain', where: whereIn(editor, at.line), ...known });
+    panel.reveal();
+  }
+
+  function explain(editor: vscode.TextEditor, line = editor.selection.active.line): Omit<Extract<JournalEntry, { kind: 'explain' }>, 'id' | 'at' | 'kind' | 'where'> | null {
     const piece = guide.pieceAt(editor.document, line);
     const folder = root();
     const project = folder ? findRoot(folder) : null;
@@ -221,6 +235,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
     voice,
     decorations,
     guide,
+    lens,
     replays,
     bridge,
     panel,
@@ -235,8 +250,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
     vscode.workspace.registerTextDocumentContentProvider(REPLAY_SCHEME, replays),
     vscode.commands.registerCommand('senior.watchReplay', () => watchReplay()),
     // Guided pieces live in project files on disk, in any language.
-    vscode.languages.registerInlineCompletionItemProvider({ scheme: 'file' }, new GhostTextProvider(guide)),
+    vscode.languages.registerCodeLensProvider({ scheme: 'file' }, lens),
     vscode.commands.registerCommand('senior.askWhy', () => whyThisLine()),
+    vscode.commands.registerCommand('senior.whyPiece', () => whyThisPiece()),
+    vscode.commands.registerCommand('senior.nextLine', () => guide.nextLine()),
+    vscode.commands.registerCommand('senior.acceptPiece', () => guide.acceptPiece()),
     vscode.commands.registerCommand('senior.cycleGear', () => session.setGear(GEARS[(GEARS.indexOf(session.gear) + 1) % GEARS.length])),
     vscode.commands.registerCommand('senior.gearType', () => session.setGear('type')),
     vscode.commands.registerCommand('senior.gearAccept', () => session.setGear('accept')),
