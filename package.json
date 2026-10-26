@@ -17,6 +17,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test:plugin && npm run test --workspaces --if-present",
     "test:plugin": "node --test \"test/*.test.mjs\"",
+    "test:ui": "claude plugin test ./plugin",
     "validate": "claude plugin validate ./plugin && claude plugin validate .",
     "eval:foresight": "node evals/foresight/run.mjs"
   }

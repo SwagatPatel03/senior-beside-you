@@ -61,6 +61,18 @@ For narration in the terminal that follows the senior's rules (one line before e
 
 Callbacks need no command. When an edit or a failure touches code linked to an earlier decision, the senior brings that decision back. Matching is by file path and symbol name, never by guessing from words.
 
+### How Senior looks in the terminal
+
+In the Claude Code terminal, Senior marks its presence with one amber ◆:
+
+- A welcome line above the prompt when a session starts, with the number of decisions on record.
+- A spinner that says what is really happening, such as "◆ Reading src/orders/order.ts…" or "◆ Checking decision D-003…", in place of Claude Code's random words.
+- "◆ Done in 14s · 1 decision recorded" at the end of a turn. Decisions are mentioned only when the turn recorded some.
+- "◆ senior · pair" at the right of the footer, showing the current mode.
+- A short notice when a callback fires, naming the decision that the file is linked to.
+
+The look uses Claude Code's mod API, which is early access and can change between releases. Senior does not depend on it. If a Claude Code release changes that API, Claude Code skips the look and draws its own default screen, and every Senior command, hook and callback keeps working. In VS Code and the desktop app, Claude Code's own UI is used unchanged.
+
 ### What it keeps in your project
 
 The first design session creates `.senior/` in your project. The hooks do nothing in projects without it, so the plugin stays out of the way elsewhere.
@@ -122,6 +134,7 @@ Run it with no arguments to see every command.
 ```
 npm install
 npm test                                   # plugin tests and the extension's unit tests
+npm run test:ui                            # the terminal look, in Claude Code's own test kit
 npm run typecheck
 npm run build
 npm run test:integration -w apps/vscode    # the extension inside a real VS Code
@@ -137,6 +150,7 @@ The integration tests download VS Code into `apps/vscode/.vscode-test/` the firs
 | `plugin/core/` | The shared library: ledger, plans, regret library, callbacks, session records. No dependencies and no knowledge of Claude Code or VS Code. |
 | `plugin/cli/` | The Senior CLI, the only writer of the ledger. |
 | `plugin/hooks/`, `plugin/bridge/` | Thin wrappers that connect the core to Claude Code and to the editor. |
+| `plugin/ui/` | Senior's look in the Claude Code terminal. Optional: Senior works without it. |
 | `plugin/skills/`, `plugin/agents/`, `plugin/output-styles/`, `plugin/regrets/` | Prompts and data. |
 | `apps/vscode/` | The VS Code extension. |
 | `evals/foresight/` | The test of the design session. |

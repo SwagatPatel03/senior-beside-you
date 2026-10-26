@@ -13,5 +13,6 @@
     "design",
     "decisions"
   ],
-  "repository": "https://github.com/SwagatPatel03/senior-beside-you"
+  "repository": "https://github.com/SwagatPatel03/senior-beside-you",
+  "types": "./ui/state.d.ts"
 }

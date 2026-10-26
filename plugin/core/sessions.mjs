@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { readJson, seniorPath, writeJson } from './paths.mjs';
 
-function safeId(sessionId) {
+export function safeId(sessionId) {
   return String(sessionId || 'unknown').replace(/[^\w-]/g, '-').slice(0, 80);
 }
 
