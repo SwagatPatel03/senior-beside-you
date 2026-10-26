@@ -24,6 +24,18 @@ A quiet line under the Senior heading always shows what Claude Code is doing, su
 
 Put the cursor on any line and press Ctrl+Alt+/ (Cmd+Alt+/ on a Mac). If the line came from a guided piece or carries out a recorded decision, the answer appears at once: why the piece exists, what to notice, the decision behind it and the options that were turned down. **Ask more about this line** sends your own question to Claude Code, which answers in the panel and carries on where it was.
 
+## Decisions in the code
+
+You never need to open `.senior/ledger/` to know why the code is the way it is. Each recorded decision shows as one quiet line above the code it is about, such as "D-004: Stop double bookings with a unique rule in the database". The line also says whether the decision is hard or easy to undo, and it has two links, **Why?** and **Full record**.
+
+- **Why?** opens a card with what was chosen, why, what was turned down and why, what it protects against, and when you will see it matter. The same card opens when you hover over the linked name.
+- **Full record** opens every detail in the Senior panel. That includes examples, the checks done before a hard-to-undo decision, where the decision lives in the code, and its history: when it was made, each time the senior brought it back, and whether it was replaced. At the bottom, **Show the original record** shows the stored JSON exactly as it is, so nothing is ever hidden.
+- When a decision replaces an older one, the line says so, and the card shows what changed.
+- When two or more decisions are about the same code, they share one line, "2 decisions are about reserveSlot.", with **Show them**.
+- The status bar counts the decisions linked to the open file. Click the count to choose one.
+
+A decision shows above the first definition of each symbol linked to it. A decision linked only by a path shows at the top of the file. As with callbacks, nothing is guessed from words. The lines update by themselves when a decision is recorded, linked or replaced. The history of when a decision was brought back comes from `.senior/sessions/`, which is not committed, so each computer shows its own.
+
 ## Three gears
 
 | Gear | What happens | When it helps |
@@ -83,6 +95,7 @@ If the feature has no plan yet, Claude Code starts with a short design session. 
 | Senior: Take over typing | Escape, while Senior is typing |
 | Senior: Fill in this piece for me | |
 | Senior: Skip this piece | |
+| Senior: Show the decisions linked to this file | |
 | Senior: Watch a replay | Left and right arrows move between scenes |
 | Senior: Show the Senior panel | |
 | Senior: Set up Claude Code for Senior | |
@@ -94,6 +107,7 @@ If the feature has no plan yet, Claude Code starts with a short design session. 
 | `senior.gear` | `type` | How hands-on you want to be: `type`, `accept` or `watch`. |
 | `senior.watchSpeed` | `40` | Characters per second when Senior types in the watch gear. |
 | `senior.readAloud` | `false` | Reads the narration aloud with your computer's own voice: the built-in speech on Windows, `say` on macOS, and `spd-say` or `espeak` on Linux. |
+| `senior.decisionLenses` | `true` | Shows a line above the code each ledger decision is about, with the whole decision on hover. |
 
 The colours of the slot you are writing in, the hints and the highlights follow your theme. You can change them in `workbench.colorCustomizations` with the `senior.*` colour ids.
 

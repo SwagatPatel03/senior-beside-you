@@ -1,6 +1,6 @@
 // Serves the Senior panel outside VS Code, with VS Code's theme colours and a sample session, for
 // working on the design. Run `npm run build`, then `npm run preview`, and open the printed address.
-// Add ?theme=light for the light theme, and ?state=welcome, watch or diverged for the other states.
+// Add ?theme=light for the light theme, and ?state=welcome, watch, diverged or decision for the other states.
 
 import fs from 'node:fs';
 import http from 'node:http';
@@ -124,6 +124,48 @@ const STATES = {
     connection: { lastCallSecondsAgo: null, claudeFound: true, pluginInstalled: false },
   },
   watch: { ...SAMPLE, gear: 'watch', active: { ...SAMPLE.active, watching: true } },
+  decision: {
+    ...SAMPLE,
+    active: null,
+    journal: [
+      SAMPLE.journal.at(-1),
+      {
+        id: 'e11',
+        at: at(0),
+        kind: 'decision',
+        decision: {
+          id: 'D-001',
+          title: 'Bookings are atomic',
+          undo: 'Hard to undo',
+          chosen: 'A unique index on confirmed bookings per slot, so the database refuses a second booking for the same place.',
+          why: 'Only the database sees two requests that arrive at the same moment. Code that checks first and saves second can be fooled by them.',
+          rejected: [
+            { option: 'Check if the slot is free, then insert', why: 'Two requests can pass the check at the same moment.' },
+            { option: 'Lock the whole class while booking', why: 'Every booking for a busy class would wait in line.' },
+          ],
+          guards: 'Two members holding the same place in a class.',
+          payoff: 'The first time two people press Book in the same second.',
+          examples: ['Two members press Book for the 7 am spin class at the same second. One gets the place, and the other sees "This place was just taken."'],
+          files: [
+            { path: 'src/bookings/service.py', open: true },
+            { path: 'migrations/*.sql', open: false },
+          ],
+          symbols: ['book'],
+          regrets: ['R-bookings-01'],
+          checks: [
+            { label: 'The regret library', result: 'R-bookings-01 applies and is avoided' },
+            { label: 'An independent review', result: 'Agreed; suggested also handling cancellations' },
+            { label: 'Established practice', result: 'skipped: no web search' },
+          ],
+          history: [
+            'Decided on 12 October 2026, for the feature "class-booking".',
+            'On 14 October 2026, an edit touched book, and the senior brought this decision back.',
+          ],
+          record: { file: '.senior/ledger/D-001-bookings-are-atomic.json', json: '{\n  "id": "D-001",\n  "title": "Bookings are atomic",\n  "status": "active",\n  "reversibility": "one-way"\n}' },
+        },
+      },
+    ],
+  },
   replay: {
     ...SAMPLE,
     active: null,
@@ -183,7 +225,8 @@ const server = http.createServer((req, res) => {
     res.writeHead(404).end();
     return;
   }
-  res.writeHead(200, { 'content-type': file.endsWith('.css') ? 'text/css' : 'text/javascript' }).end(fs.readFileSync(file));
+  const type = { '.css': 'text/css', '.woff2': 'font/woff2' }[path.extname(file)] ?? 'text/javascript';
+  res.writeHead(200, { 'content-type': type }).end(fs.readFileSync(file));
 });
 
 server.listen(Number(process.env.PORT) || 5317, '127.0.0.1', () => {

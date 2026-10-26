@@ -346,6 +346,87 @@ test('"why?" on a written line answers at once from its piece and the decision b
   assert.ok(!api.session.hasPendingQuestions(), 'nothing was sent to Claude Code');
 });
 
+test('a decision shows above the code it is about, with the whole decision on hover and every detail in the panel', async () => {
+  const core = await import(require('node:url').pathToFileURL(path.resolve(__dirname, '../../../../plugin/core/index.mjs')).href);
+  fs.mkdirSync(file('src/bookings'), { recursive: true });
+  fs.writeFileSync(file('src/bookings/reserve.js'), "'use strict';\n\nasync function reserveSlot(memberId, slotStart) {\n  return { memberId, slotStart };\n}\n\nmodule.exports = { reserveSlot };\n");
+  const decision = core.addEntry(workspace, {
+    title: 'Stop double bookings with a unique rule',
+    reversibility: 'one-way',
+    chosen: 'A unique rule on the class and the start time',
+    why: 'Only the database sees two requests that arrive at the same moment.',
+    rejected: [{ option: 'Check in code, then save', why: 'Two requests at once both see the spot as free.' }],
+    guards: 'Two members holding the same spot',
+    payoff: 'Two people press Book in the same second',
+    files: ['src/bookings/reserve.js'],
+    symbols: ['reserveSlot'],
+    checks: { regretLibrary: 'applies and is avoided', independentReview: 'agreed', openSource: 'skipped: no web search' },
+  });
+  core.appendEvent(workspace, 'test-callbacks', { type: 'callback', decision: decision.id, trigger: 'edit', reasons: ['reserveSlot'] });
+  api.decisions.reload();
+
+  const doc = await vscode.workspace.openTextDocument(file('src/bookings/reserve.js'));
+  const editor = await vscode.window.showTextDocument(doc);
+  const ours = async () => ((await vscode.commands.executeCommand('vscode.executeCodeLensProvider', doc.uri)) || []).filter((l) => l.command && /^\$\(layers\)|^(Hard|Easy) to undo$|^Replaced |^Why\?$|^What changed\?$|^Full record$/.test(l.command.title));
+  let seen = [];
+  const lenses = await until(async () => {
+    seen = ((await vscode.commands.executeCommand('vscode.executeCodeLensProvider', doc.uri)) || []).map((l) => `${l.range.start.line}:${l.command ? JSON.stringify(l.command.title) : 'none'}`);
+    const found = await ours();
+    return found.length === 4 ? found : null;
+  }, 'the decision line above reserveSlot', 8000).catch((err) => {
+    throw new Error(`${err.message}. Lenses: ${seen.join(', ') || 'none'}. Root: ${core.findRoot(path.dirname(doc.uri.fsPath))}. Ledger: ${core.loadLedger(workspace).map((e) => e.id).join(',')}`);
+  });
+  assert.deepEqual(
+    lenses.map((l) => l.command.title),
+    [`$(layers) ${decision.id}: Stop double bookings with a unique rule`, 'Hard to undo', 'Why?', 'Full record'],
+  );
+  assert.ok(lenses.every((l) => l.range.start.line === 2), 'every part sits above the definition');
+
+  // The card shows over the linked name, and not over other words on the line.
+  const hoverText = async (character) => {
+    const hovers = (await vscode.commands.executeCommand('vscode.executeHoverProvider', doc.uri, new vscode.Position(2, character))) || [];
+    return hovers.flatMap((h) => h.contents.map((c) => (typeof c === 'string' ? c : c.value))).join('\n');
+  };
+  const card = await hoverText(18);
+  for (const part of ['What we chose', 'Why', 'What we turned down', 'It protects against', 'When you will see it matter', 'See every detail in the Senior panel']) {
+    assert.ok(card.includes(part), `the card has "${part}"`);
+  }
+  assert.ok(!(await hoverText(30)).includes('What we chose'), 'no card over memberId');
+
+  await vscode.commands.executeCommand('senior.decisionWhy', doc.uri, 2, 15);
+  assert.deepEqual([editor.selection.active.line, editor.selection.active.character], [2, 15]);
+
+  const before = api.session.snapshot().journal.length;
+  await vscode.commands.executeCommand('senior.showDecision', decision.id);
+  const added = api.session.snapshot().journal.slice(before);
+  assert.equal(added.length, 1);
+  assert.equal(added[0].kind, 'decision');
+  const detail = added[0].decision;
+  assert.equal(detail.undo, 'Hard to undo');
+  assert.deepEqual(detail.checks.map((c) => c.label), ['The regret library', 'An independent review', 'Established practice']);
+  assert.ok(detail.history.some((h) => /an edit touched reserveSlot, and the senior brought this decision back/.test(h)), detail.history.join(' | '));
+  assert.match(detail.record.file, /^\.senior\/ledger\/D-\d+-[\w-]+\.json$/);
+  assert.equal(JSON.parse(detail.record.json).id, decision.id);
+
+  // A replacement is picked up from the ledger folder without a reload.
+  const next = core.addEntry(workspace, { title: 'Hold a spot while the member pays', reversibility: 'two-way', chosen: 'A ten minute hold', why: 'Members lost spots while paying.' }, { supersedes: decision.id });
+  const replaced = await until(async () => {
+    const found = await ours();
+    return found.some((l) => l.command.title === `Replaced ${decision.id}`) ? found : null;
+  }, 'the line for the replacement');
+  assert.deepEqual(
+    replaced.map((l) => l.command.title),
+    [`$(layers) ${next.id}: Hold a spot while the member pays`, `Replaced ${decision.id}`, 'What changed?', 'Full record'],
+  );
+
+  await vscode.workspace.getConfiguration('senior').update('decisionLenses', false, vscode.ConfigurationTarget.Global);
+  try {
+    await until(async () => (await ours()).length === 0, 'the lines to go when they are turned off');
+  } finally {
+    await vscode.workspace.getConfiguration('senior').update('decisionLenses', undefined, vscode.ConfigurationTarget.Global);
+  }
+});
+
 test('the computer\'s own voice reads narration aloud, and the panel only offers it when there is one', async () => {
   const available = await api.voice.ready;
   await until(() => api.session.speech !== 'unknown', 'the voice check');

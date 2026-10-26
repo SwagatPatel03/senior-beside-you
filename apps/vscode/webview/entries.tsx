@@ -1,5 +1,5 @@
-import { Fragment } from 'preact';
-import type { JournalEntry, PieceView } from '../src/panel/protocol.ts';
+import { Fragment, type ComponentChildren } from 'preact';
+import type { DecisionDetail, JournalEntry, PieceView } from '../src/panel/protocol.ts';
 import { send } from './vscode.ts';
 
 const PIECE_STATUS: Record<PieceView['status'], { glyph: string; label: string }> = {
@@ -70,6 +70,115 @@ function Pieces({ pieces }: { pieces: PieceView[] }) {
         ))}
       </ol>
     </section>
+  );
+}
+
+function Part({ label, children }: { label: string; children: ComponentChildren }) {
+  return (
+    <section class="part">
+      <span class="label">{label}</span>
+      {children}
+    </section>
+  );
+}
+
+/** One ledger decision in full: the parts the hover card shows, then everything else, then the stored record. */
+function DecisionCard({ d }: { d: DecisionDetail }) {
+  const replaces = d.replaces;
+  return (
+    <article class="decision-card">
+      <div class="decision-head">
+        <code>{d.id}</code>
+        <span class="chip">{d.undo}</span>
+        <span class={`chip ${d.replacedBy ? 'old' : 'live'}`}>{d.replacedBy ? `Replaced by ${d.replacedBy}` : 'Still in force'}</span>
+      </div>
+      <h2>{d.title}</h2>
+      <Part label="What we chose">
+        <p>{d.chosen}</p>
+      </Part>
+      <Part label="Why">
+        <p>{d.why}</p>
+      </Part>
+      {d.rejected.length > 0 && (
+        <Part label="What we turned down">
+          {d.rejected.map((r) => (
+            <p key={r.option}>
+              <strong>{r.option}.</strong> {r.why}
+            </p>
+          ))}
+        </Part>
+      )}
+      {d.guards && (
+        <Part label="It protects against">
+          <p>{d.guards}</p>
+        </Part>
+      )}
+      {d.payoff && (
+        <Part label="When you will see it matter">
+          <p>{d.payoff}</p>
+        </Part>
+      )}
+      {d.examples.length > 0 && (
+        <Part label={d.examples.length === 1 ? 'An example' : 'Examples'}>
+          {d.examples.map((x) => (
+            <p key={x}>{x}</p>
+          ))}
+        </Part>
+      )}
+      {replaces && (
+        <Part label="What it replaced">
+          <p>
+            <button class="link" onClick={() => send({ type: 'showDecision', id: replaces.id })}>
+              {replaces.id}
+            </button>
+            {replaces.title ? ` ${replaces.title}.` : '.'}
+            {replaces.chosen ? ` Before, we chose ${lowerFirst(replaces.chosen)}.` : ''}
+          </p>
+        </Part>
+      )}
+      <Part label="Where it lives in the code">
+        {d.files.length === 0 && d.symbols.length === 0 ? (
+          <p>It is not linked to any code yet.</p>
+        ) : (
+          <ul class="links">
+            {d.symbols.map((sym) => (
+              <li key={`s:${sym}`}>
+                <code>{sym}</code>
+              </li>
+            ))}
+            {d.files.map((file) => (
+              <li key={`f:${file.path}`}>{file.open ? <FileLink file={file.path} /> : <code>{file.path}</code>}</li>
+            ))}
+          </ul>
+        )}
+      </Part>
+      {d.regrets.length > 0 && (
+        <Part label="From the regret library">
+          <p>{d.regrets.join(', ')}</p>
+        </Part>
+      )}
+      {d.checks.length > 0 && (
+        <Part label="Checks done before deciding">
+          {d.checks.map((c) => (
+            <p key={c.label}>
+              <strong>{c.label}:</strong> {c.result}
+            </p>
+          ))}
+        </Part>
+      )}
+      <Part label="History">
+        {d.history.map((h, i) => (
+          <p key={i}>{h}</p>
+        ))}
+      </Part>
+      <details>
+        <summary>Show the original record</summary>
+        <p class="record-file">
+          This is <code>{d.record.file}</code>, exactly as it is stored.
+        </p>
+        <pre>{d.record.json}</pre>
+      </details>
+    </article>
   );
 }
 
@@ -165,6 +274,9 @@ export function Entry({ entry }: { entry: JournalEntry }) {
                   Not {lowerFirst(r.option)}: {lowerFirst(r.why)}
                 </p>
               ))}
+              <button class="link full-record" onClick={() => send({ type: 'showDecision', id: d.id })}>
+                Full record
+              </button>
             </div>
           ))}
           <button class="link ask-more" onClick={() => send({ type: 'askMore', where: entry.where })}>
@@ -172,6 +284,8 @@ export function Entry({ entry }: { entry: JournalEntry }) {
           </button>
         </article>
       );
+    case 'decision':
+      return <DecisionCard d={entry.decision} />;
     case 'summary':
       return (
         <section class="summary">

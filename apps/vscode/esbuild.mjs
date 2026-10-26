@@ -1,5 +1,6 @@
 // Builds the extension (Node, CommonJS) and the panel (browser, ESM), and copies the regret library
-// next to the bundle so the extension can read it without the plugin installed.
+// next to the bundle so the extension can read it without the plugin installed. The panel's font is
+// copied into dist/ by the CSS bundle, and its licence is copied beside it.
 
 import { context } from 'esbuild';
 import fs from 'node:fs';
@@ -48,13 +49,19 @@ const builds = [
     target: 'chrome120',
     jsx: 'automatic',
     jsxImportSource: 'preact',
-    loader: { '.css': 'css' },
+    loader: { '.css': 'css', '.woff2': 'file' },
+    assetNames: '[name]',
   },
 ];
+
+function copyFontLicence() {
+  fs.copyFileSync(path.join(here, 'webview', 'fonts', 'OFL.txt'), path.join(here, 'dist', 'source-serif-4-OFL.txt'));
+}
 
 // Start from an empty dist/ so no source map or old package from a development build is shipped.
 fs.rmSync(path.join(here, 'dist'), { recursive: true, force: true });
 copyRegrets();
+copyFontLicence();
 const contexts = await Promise.all(builds.map((b) => context(b)));
 if (watch) {
   await Promise.all(contexts.map((c) => c.watch()));

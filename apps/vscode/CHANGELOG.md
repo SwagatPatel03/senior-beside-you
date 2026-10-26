@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Decisions in the code. Each ledger decision shows as a line above the code it is about, with **Why?** for a card with the whole decision and **Full record** for every detail in the Senior panel, including its history and the stored JSON. The status bar counts the decisions linked to the open file. The new setting `senior.decisionLenses` turns the lines off.
+- "About this line" has a **Full record** link for each decision it names.
+
 ## 0.1.0 (2026-10-23)
 
 The first release.

@@ -76,6 +76,8 @@ The first design session creates `.senior/` in your project. The hooks do nothin
 
 Commit the rest of `.senior/` with your code. It is the memory of why your code is the way it is.
 
+You do not have to read these files yourself. In VS Code, each decision shows as a line above the code it is about, and its whole record opens in the Senior panel. See [Decisions in the code](apps/vscode/README.md#decisions-in-the-code).
+
 ## How the editor connection works
 
 ```

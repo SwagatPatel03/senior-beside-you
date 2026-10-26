@@ -103,6 +103,21 @@
         "category": "Senior"
       },
       {
+        "command": "senior.pickDecision",
+        "title": "Show the decisions linked to this file",
+        "category": "Senior"
+      },
+      {
+        "command": "senior.showDecision",
+        "title": "Show a decision in full",
+        "category": "Senior"
+      },
+      {
+        "command": "senior.decisionWhy",
+        "title": "Why was this decided?",
+        "category": "Senior"
+      },
+      {
         "command": "senior.watchReplay",
         "title": "Watch a replay",
         "category": "Senior"
@@ -165,6 +180,11 @@
           "type": "boolean",
           "default": false,
           "description": "Read narration aloud with your system voice."
+        },
+        "senior.decisionLenses": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a line above the code each ledger decision is about. Hover over the linked name, or click Why?, to read the whole decision."
         }
       }
     },
@@ -223,7 +243,19 @@
           "highContrast": "#FF8080"
         }
       }
-    ]
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "senior.showDecision",
+          "when": "false"
+        },
+        {
+          "command": "senior.decisionWhy",
+          "when": "false"
+        }
+      ]
+    }
   },
   "scripts": {
     "build": "node esbuild.mjs",

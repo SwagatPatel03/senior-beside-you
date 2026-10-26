@@ -19,6 +19,31 @@ export interface DecisionView {
   rejected: { option: string; why: string }[];
 }
 
+/** Everything in one ledger decision, as the panel shows it when the user asks for the full record. */
+export interface DecisionDetail {
+  id: string;
+  title: string;
+  /** "Hard to undo" or "Easy to undo". */
+  undo: string;
+  replacedBy?: string;
+  chosen: string;
+  why: string;
+  rejected: { option: string; why: string }[];
+  guards: string;
+  payoff: string;
+  examples: string[];
+  replaces?: { id: string; title: string; chosen: string };
+  /** Linked paths. A glob cannot be opened, so only plain paths are links. */
+  files: { path: string; open: boolean }[];
+  symbols: string[];
+  regrets: string[];
+  checks: { label: string; result: string }[];
+  /** Sentences, oldest first: when it was decided, each time it was brought back, and when it was replaced. */
+  history: string[];
+  /** The stored JSON, exactly as it is on disk, and its project-relative path. */
+  record: { file: string; json: string };
+}
+
 /** What Claude Code is doing right now, from the plugin's activity hook. */
 export interface Activity {
   state: 'working' | 'thinking' | 'idle';
@@ -71,6 +96,7 @@ export type JournalEntry =
   | { id: string; at: string; kind: 'pieces'; pieces: PieceView[] }
   | { id: string; at: string; kind: 'check'; command: string; expected: string; passed: boolean; output?: string; evidence?: Place[]; risk?: string }
   | { id: string; at: string; kind: 'explain'; where: string; why?: string; notice?: string; decisions: DecisionView[] }
+  | { id: string; at: string; kind: 'decision'; decision: DecisionDetail }
   | { id: string; at: string; kind: 'summary'; summary: string; verified: string[]; notVerified: string[]; takeaway?: string }
   | { id: string; at: string; kind: 'open'; file: string; line?: number; why: string }
   | { id: string; at: string; kind: 'notice'; text: string; tone?: 'info' | 'error' };
@@ -179,6 +205,7 @@ export type FromPanel =
   | { type: 'piece'; action: PieceAction }
   | ({ type: 'replay' } & ReplayAction)
   | { type: 'openFile'; file: string; line?: number }
+  | { type: 'showDecision'; id: string }
   | { type: 'setup' }
   | { type: 'copy'; text: string }
   | { type: 'toggleReadAloud' };

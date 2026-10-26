@@ -54,8 +54,10 @@ export class PanelProvider implements vscode.WebviewViewProvider, vscode.Disposa
     });
   }
 
+  /** Show the panel. If it has never been opened, open it; it then shows the whole journal. */
   reveal(): void {
-    this.view?.show?.(true);
+    if (this.view) this.view.show?.(true);
+    else void vscode.commands.executeCommand(`${PanelProvider.viewId}.focus`);
   }
 
   private spokenPiece = '';

@@ -5,6 +5,7 @@ import * as vscode from 'vscode';
 import { activeEntries, entriesTouching, findRoot, setSeedDir } from '../../../plugin/core/index.mjs';
 import { BridgeHandlers } from './bridge/handlers.ts';
 import { BridgeServer } from './bridge/server.ts';
+import { DecisionLenses } from './decisions/controller.ts';
 import { GuideController } from './guide/controller.ts';
 import { Decorations } from './guide/decorations.ts';
 import { GhostTextProvider } from './guide/inline.ts';
@@ -20,6 +21,7 @@ const GEARS: Gear[] = ['type', 'accept', 'watch'];
 
 export interface SeniorApi {
   session: SessionStore;
+  decisions: DecisionLenses;
   guide: GuideController;
   replays: ReplayController;
   voice: Voice;
@@ -60,6 +62,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
     if (available && session.readAloud) void voice.warm();
   });
   const status = new StatusItem(session);
+  const decisions = new DecisionLenses();
+
+  /** The full record of a decision, in the Senior panel. */
+  function showDecision(id: string, project?: string): void {
+    const folder = root();
+    const dir = project ?? (folder ? findRoot(folder) : null);
+    const detail = dir ? decisions.detail(dir, id) : null;
+    if (!detail) {
+      void vscode.window.showWarningMessage(`There is no decision ${id} in this project's ledger.`);
+      return;
+    }
+    session.add({ kind: 'decision', decision: detail });
+    panel.reveal();
+  }
 
   async function watchReplay(id?: string): Promise<void> {
     let chosen = id;
@@ -118,7 +134,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
     const piece = guide.pieceAt(editor.document, line);
     const folder = root();
     const project = folder ? findRoot(folder) : null;
-    const decisions: DecisionView[] = [];
+    const linked: DecisionView[] = [];
     if (project) {
       const ledger = activeEntries(project);
       const rel = path.relative(project, editor.document.uri.fsPath).replace(/\\/g, '/');
@@ -126,11 +142,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
       for (const hit of entriesTouching(ledger, { files: [rel], text: editor.document.lineAt(line).text })) ids.add(hit.entry.id);
       for (const id of [...ids].slice(0, 3)) {
         const d = ledger.find((e) => e.id.toLowerCase() === id.toLowerCase());
-        if (d) decisions.push({ id: d.id, title: d.title, chosen: d.chosen, why: d.why, rejected: d.rejected.slice(0, 3) });
+        if (d) linked.push({ id: d.id, title: d.title, chosen: d.chosen, why: d.why, rejected: d.rejected.slice(0, 3) });
       }
     }
-    if (!piece && !decisions.length) return null;
-    return { ...(piece ? { why: piece.why } : {}), ...(piece?.notice ? { notice: piece.notice } : {}), decisions };
+    if (!piece && !linked.length) return null;
+    return { ...(piece ? { why: piece.why } : {}), ...(piece?.notice ? { notice: piece.notice } : {}), decisions: linked };
   }
 
   async function onPanel(message: FromPanel): Promise<void> {
@@ -167,6 +183,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
         await vscode.window.showTextDocument(doc, { selection: new vscode.Range(at, at) });
         break;
       }
+      case 'showDecision':
+        showDecision(message.id);
+        break;
       case 'setup':
         if (await installPlugin(log)) await refreshSetup();
         break;
@@ -182,6 +201,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
         break;
       }
     }
+  }
+
+  async function pickDecision(ids?: string[], project?: string): Promise<void> {
+    const chosen = await decisions.pick(ids, project);
+    if (chosen) showDecision(chosen.id, chosen.project);
   }
 
   async function refreshSetup(): Promise<void> {
@@ -201,6 +225,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
     bridge,
     panel,
     status,
+    decisions,
+    vscode.languages.registerCodeLensProvider({ scheme: 'file' }, decisions),
+    vscode.languages.registerHoverProvider({ scheme: 'file' }, decisions),
+    vscode.commands.registerCommand('senior.showDecision', (id?: string, project?: string) => (id ? showDecision(id, project) : pickDecision())),
+    vscode.commands.registerCommand('senior.pickDecision', (ids?: string[], project?: string) => pickDecision(ids, project)),
+    vscode.commands.registerCommand('senior.decisionWhy', (uri: vscode.Uri, line: number, character: number) => decisions.showWhy(uri, line, character)),
     vscode.window.registerWebviewViewProvider(PanelProvider.viewId, panel),
     vscode.workspace.registerTextDocumentContentProvider(REPLAY_SCHEME, replays),
     vscode.commands.registerCommand('senior.watchReplay', () => watchReplay()),
@@ -231,7 +261,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
   }
   void refreshSetup();
 
-  return { session, guide, replays, voice, bridge: bridge.address };
+  return { session, decisions, guide, replays, voice, bridge: bridge.address };
 }
 
 export function deactivate(): void {
