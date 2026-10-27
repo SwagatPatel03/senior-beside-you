@@ -628,6 +628,21 @@ test('a level set in the editor reaches Claude, and a piece without a level take
   }
 });
 
+test('Codex selection uses the same editor controls and shared memory', async () => {
+  const config = vscode.workspace.getConfiguration('senior');
+  await config.update('agent', 'codex', vscode.ConfigurationTarget.Workspace);
+  try {
+    assert.equal(api.session.connection().host, 'codex');
+    fs.writeFileSync(file('src/codex.js'), '// Codex pairing\n');
+    const guided = await call('guide', { pieces: [{ file: 'src/codex.js', kind: 'flesh', where: 'end', text: 'export const answer = 42;\n', why: 'Both agents use the same editor.' }] });
+    assert.equal(guided.status, 200);
+    assert.match(read('src/codex.js'), /export const answer = 42/);
+    assert.ok(api.session.snapshot().memory, 'project memory is still available');
+  } finally {
+    await config.update('agent', undefined, vscode.ConfigurationTarget.Workspace);
+  }
+});
+
 exports.run = async function run() {
   const extension = vscode.extensions.getExtension('swagatpatel.senior');
   api = await extension.activate();

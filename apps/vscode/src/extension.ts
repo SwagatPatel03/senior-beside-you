@@ -15,7 +15,7 @@ import type { DecisionView, FromPanel, Gear, JournalEntry } from './panel/protoc
 import { PanelProvider } from './panel/provider.ts';
 import { REPLAY_SCHEME, ReplayController } from './replay/controller.ts';
 import { SessionStore } from './session.ts';
-import { detect, installPlugin } from './setup.ts';
+import { agentHost, detect, installPlugin } from './setup.ts';
 import { StatusItem } from './status.ts';
 import { Voice } from './voice.ts';
 
@@ -255,7 +255,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
         await handlers.chooseIdiom(message.id, message.choice);
         break;
       case 'setup':
-        if (await installPlugin(log)) await refreshSetup();
+        if (await installPlugin(log, context.extensionPath, agentHost(), root())) await refreshSetup();
+        break;
+      case 'setAgent':
+        if (message.host !== 'claude' && message.host !== 'codex') break;
+        await vscode.workspace.getConfiguration('senior').update('agent', message.host, vscode.ConfigurationTarget.Workspace);
+        await refreshSetup();
         break;
       case 'copy':
         await vscode.env.clipboard.writeText(message.text);
@@ -279,7 +284,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
   }
 
   async function refreshSetup(): Promise<void> {
-    const found = await detect();
+    const host = agentHost();
+    const found = await detect(host);
+    if (host !== agentHost()) return;
     session.claudeFound = found.claudeFound;
     session.pluginInstalled = found.pluginInstalled;
     session.changed();
@@ -328,7 +335,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
     }),
     vscode.commands.registerCommand('senior.focus', () => vscode.commands.executeCommand('senior.panel.focus')),
     vscode.commands.registerCommand('senior.setupClaudeCode', async () => {
-      if (await installPlugin(log)) await refreshSetup();
+      await vscode.workspace.getConfiguration('senior').update('agent', 'claude', vscode.ConfigurationTarget.Workspace);
+      if (await installPlugin(log, context.extensionPath, 'claude')) await refreshSetup();
+    }),
+    vscode.commands.registerCommand('senior.setupCodex', async () => {
+      await vscode.workspace.getConfiguration('senior').update('agent', 'codex', vscode.ConfigurationTarget.Workspace);
+      if (await installPlugin(log, context.extensionPath, 'codex', root())) await refreshSetup();
     }),
   );
 
@@ -343,7 +355,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
   try {
     await bridge.start();
   } catch (err) {
-    log.error(`The bridge for Claude Code could not start: ${err instanceof Error ? err.message : String(err)}`);
+    log.error(`The Senior editor bridge could not start: ${err instanceof Error ? err.message : String(err)}`);
   }
   void refreshSetup();
 

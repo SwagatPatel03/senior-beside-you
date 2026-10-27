@@ -13,12 +13,14 @@ The design behind it is in [docs/architectures.md](docs/architectures.md).
 
 | Part | What it is | Where |
 | --- | --- | --- |
-| **The senior plugin for Claude Code** | Design sessions, a decision ledger with callbacks, a regret library of known failures, narration rules, onboarding for large repos, the project story, pairing in your editor, and a fast lane whose work you can replay afterwards. | [`plugin/`](plugin) |
+| **The senior plugin for Claude Code and Codex** | Design sessions, a decision ledger with callbacks, a regret library of known failures, narration rules, onboarding for large repos, the project story, pairing in your editor, and a fast lane whose work you can replay afterwards. | [`plugin/`](plugin), [Codex setup](docs/codex.md) |
 | **Senior for VS Code** | The editor side of pairing: the plan traced on the lines you write, routine code filled in, three gears for how hands-on you want to be, a journal of the session, and a viewer for replays. | [`apps/vscode/`](apps/vscode) |
 
-The plugin works on its own in any terminal. The extension needs the plugin, because Claude Code does the thinking and the extension is how it reaches your editor.
+The plugin works on its own in a terminal. The extension connects your coding agent to your editor. Both hosts share the same `.senior/` memory and editor UI.
 
 ## Install
+
+**Codex:** Follow [Codex setup](docs/codex.md), or select **Codex** in the VS Code panel and click **Set it up**. Use `$senior:onboard` to start and `$senior:pair` to build hands-on. The editor UI is shared. Native terminal customization differs: Codex gets branding, hook status messages and an optional theme; Claude's spinner/footer mod has no documented Codex equivalent.
 
 You need [Claude Code](https://claude.com/claude-code) and Node.js 20 or later. Building the VS Code extension from source needs Node.js 22 or later.
 
@@ -39,7 +41,7 @@ npm run package -w apps/vscode
 code --install-extension apps/vscode/dist/senior.vsix
 ```
 
-If you install the extension first, its panel offers to install the plugin for you. It shows the two commands before it runs them.
+If you install the extension first, its panel offers to install the plugin for your selected agent.
 
 ## Use it
 

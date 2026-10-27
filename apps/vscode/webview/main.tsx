@@ -87,7 +87,7 @@ function App() {
         <footer class="footer">
           <ReplayNav replay={replay} />
           <Composer placeholder="Ask why about this scene" />
-          {!live && <p class="meter quiet">Claude Code answers questions while /senior:replay is running.</p>}
+          {!live && <p class="meter quiet">{state.connection.host === 'codex' ? 'Codex answers questions while $senior:replay is running.' : 'Claude Code answers questions while /senior:replay is running.'}</p>}
         </footer>
       </div>
     );

@@ -27,6 +27,7 @@
     "pair programming",
     "mentor",
     "claude",
+    "codex",
     "ghost text"
   ],
   "activationEvents": [
@@ -62,6 +63,11 @@
       ]
     },
     "commands": [
+      {
+        "command": "senior.setupCodex",
+        "title": "Set up Codex for Senior",
+        "category": "Senior"
+      },
       {
         "command": "senior.askWhy",
         "title": "Why is this line here?",
@@ -211,6 +217,13 @@
     "configuration": {
       "title": "Senior",
       "properties": {
+        "senior.agent": {
+          "type": "string",
+          "enum": ["claude", "codex"],
+          "enumDescriptions": ["Use Senior with Claude Code.", "Use Senior with Codex."],
+          "default": "claude",
+          "description": "The coding agent connected to Senior. Both use the same editor and project memory."
+        },
         "senior.gear": {
           "type": "string",
           "enum": [

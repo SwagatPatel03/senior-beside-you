@@ -23,7 +23,7 @@ function shown(project, file) {
 /** One short line for the panel, or null for calls the panel shows on its own. */
 export function describeActivity(input, project) {
   const event = input.hook_event_name;
-  if (event === 'Stop') return { state: 'idle' };
+  if (['Stop', 'Interrupt', 'SessionEnd'].includes(event)) return { state: 'idle' };
   if (event === 'SubagentStop') return { state: 'idle', helper: true };
   if (event === 'UserPromptSubmit' || event === 'PostToolUse' || event === 'PostToolUseFailure') return { state: 'thinking' };
   if (event !== 'PreToolUse') return null;
@@ -31,7 +31,7 @@ export function describeActivity(input, project) {
   const tool = String(input.tool_name || '');
   const ti = input.tool_input || {};
   // The editor's own tools already appear in the panel as they happen.
-  if (tool.startsWith('mcp__plugin_senior_editor__')) return null;
+  if (/^mcp__(?:plugin_senior_)?editor__/.test(tool)) return null;
   let label;
   if (tool === 'Read') label = `Reading ${shown(project, ti.file_path)}`;
   else if (tool === 'Write') label = `Writing ${shown(project, ti.file_path)}`;
@@ -48,10 +48,10 @@ export function describeActivity(input, project) {
   return { state: 'working', label: clip(label), ...(input.agent_id ? { helper: true } : {}) };
 }
 
-async function main() {
+export async function main() {
   try {
     const input = await readInput();
-    const project = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
+    const project = (process.env.SENIOR_HOST !== 'codex' && process.env.CLAUDE_PROJECT_DIR) || input.cwd || process.cwd();
     const activity = describeActivity(input, project);
     const editor = activity && findEditor(project);
     if (editor) await callEditor(editor, 'activity', { ...activity, at: Date.now() }, { project, signal: AbortSignal.timeout(2000) });

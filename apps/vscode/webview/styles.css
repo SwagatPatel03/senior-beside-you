@@ -2020,3 +2020,13 @@ pre {
   flex-direction: column;
   gap: 6px;
 }
+/* Match the agent picker to the rest of Senior's controls in both editor themes. */
+.setup select {
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font: inherit;
+  max-width: 100%;
+}

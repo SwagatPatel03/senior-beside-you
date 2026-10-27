@@ -1,32 +1,82 @@
-// Connecting Senior to Claude Code: checking that Claude Code is installed, that the senior plugin
-// is enabled, and installing it on request. Nothing here runs without the user asking.
+// Detect the selected coding agent and install Senior when the user requests setup.
 
 import { exec, execFile } from 'node:child_process';
 import * as vscode from 'vscode';
+import path from 'node:path';
+
+export type AgentHost = 'claude' | 'codex';
+export const agentHost = (): AgentHost => vscode.workspace.getConfiguration('senior').get<AgentHost>('agent', 'claude');
 
 const MARKETPLACE = 'SwagatPatel03/senior-beside-you';
 const PLUGIN = 'senior@senior-beside-you';
 
-function run(args: string[], timeoutMs = 60_000): Promise<{ ok: boolean; out: string }> {
+function run(args: string[], timeoutMs = 60_000, host: AgentHost = 'claude'): Promise<{ ok: boolean; out: string }> {
   return new Promise((resolve) => {
     const done = (err: Error | null, stdout: string, stderr: string) => resolve({ ok: !err, out: `${stdout}${stderr}`.trim() });
     const options = { timeout: timeoutMs, windowsHide: true };
     // On Windows a shell finds both claude.exe (native installer) and claude.cmd (npm).
-    // The arguments are fixed strings from this file, never user input.
-    if (process.platform === 'win32') exec(`claude ${args.join(' ')}`, options, done);
-    else execFile('claude', args, options, done);
+    // Arguments include the extension's installation path, which can contain spaces.
+    if (process.platform === 'win32') {
+      // Reject cmd expansion and metacharacters rather than interpolating an unsafe install path.
+      if (args.some((arg) => /["%!&|<>^\r\n]/.test(arg))) {
+        resolve({ ok: false, out: 'This install path contains shell characters. Install the plugin manually using the documented commands.' });
+        return;
+      }
+      exec(`${host} ${args.map((arg) => `"${arg}"`).join(' ')}`, options, done);
+    } else execFile(host, args, options, done);
   });
 }
 
-export async function detect(): Promise<{ claudeFound: boolean; pluginInstalled: boolean | 'unknown' }> {
-  const version = await run(['--version'], 15_000);
+export async function detect(host: AgentHost = agentHost()): Promise<{ claudeFound: boolean; pluginInstalled: boolean | 'unknown' }> {
+  const version = await run(['--version'], 15_000, host);
   if (!version.ok) return { claudeFound: false, pluginInstalled: false };
-  const plugins = await run(['plugin', 'list'], 20_000);
+  const plugins = await run(host === 'codex' ? ['plugin', 'list', '--json'] : ['plugin', 'list'], 20_000, host);
   if (!plugins.ok) return { claudeFound: true, pluginInstalled: 'unknown' };
+  if (host === 'codex') {
+    try {
+      const list = JSON.parse(plugins.out) as { installed: { pluginId: string; installed: boolean; enabled: boolean }[] };
+      return { claudeFound: true, pluginInstalled: list.installed.some((p) => p.pluginId === PLUGIN && p.installed && p.enabled) };
+    } catch {
+      return { claudeFound: true, pluginInstalled: 'unknown' };
+    }
+  }
   return { claudeFound: true, pluginInstalled: /\bsenior@/.test(plugins.out) };
 }
 
-export async function installPlugin(log: vscode.LogOutputChannel): Promise<boolean> {
+export async function installPlugin(log: vscode.LogOutputChannel, extensionPath?: string, host: AgentHost = agentHost(), project?: string | null): Promise<boolean> {
+  if (host === 'codex') {
+    if (!extensionPath) return false;
+    const source = path.join(extensionPath, 'dist', 'senior-codex');
+    return vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Setting up Codex for Senior' }, async () => {
+      let installedPath: string | undefined;
+      for (const args of [['plugin', 'marketplace', 'add', source], ['plugin', 'add', PLUGIN, '--json']]) {
+        const result = await run(args, 120_000, 'codex');
+        log.info(result.out);
+        if (!result.ok && !/already/i.test(result.out)) {
+          void vscode.window.showErrorMessage('Codex setup failed. The Senior output channel has the details.');
+          log.show();
+          return false;
+        }
+        if (args[1] === 'add') {
+          try { installedPath = (JSON.parse(result.out) as { installedPath?: string }).installedPath; } catch { /* Older CLI; use the bundled source. */ }
+        }
+      }
+      if (project) {
+        const plugin = installedPath ?? path.join(source, 'codex');
+        const result = await new Promise<{ ok: boolean; out: string }>((resolve) => {
+          execFile('node', [path.join(plugin, 'codex/install-hooks.mjs'), project], { timeout: 15_000, windowsHide: true }, (err, stdout, stderr) => resolve({ ok: !err, out: `${stdout}${stderr}`.trim() }));
+        });
+        log.info(result.out);
+        if (!result.ok) {
+          void vscode.window.showErrorMessage('The Codex plugin is installed, but project hook setup failed. The Senior output channel has the details.');
+          log.show();
+          return false;
+        }
+      }
+      void vscode.window.showInformationMessage('Senior is installed for Codex. Restart Codex, review Senior in /hooks, then use $senior:onboard or $senior:pair.');
+      return true;
+    });
+  }
   const choice = await vscode.window.showInformationMessage(
     'Senior will run two Claude Code commands to add its plugin:',
     { modal: true, detail: `claude plugin marketplace add ${MARKETPLACE}\nclaude plugin install ${PLUGIN}` },

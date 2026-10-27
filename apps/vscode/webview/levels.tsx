@@ -122,7 +122,7 @@ export function Levels({ levels }: { levels: LevelsView | null }) {
         </div>
       )}
 
-      <p class="quiet small">Your levels follow you to every project. This codebase stays with this project. You can also change a level in Claude Code with /senior:level.</p>
+      <p class="quiet small">Your levels follow you to every project. This codebase stays with this project. You can also ask Senior to change a level in your coding agent.</p>
     </section>
   );
 }

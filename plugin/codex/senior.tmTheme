@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>name</key><string>Senior</string>
+  <key>settings</key><array>
+    <dict><key>settings</key><dict>
+      <key>background</key><string>#1E1C18</string>
+      <key>foreground</key><string>#E5DFD2</string>
+      <key>caret</key><string>#B59A5B</string>
+      <key>selection</key><string>#B59A5B44</string>
+    </dict></dict>
+    <dict><key>scope</key><string>comment</string><key>settings</key><dict><key>foreground</key><string>#9C9384</string></dict></dict>
+    <dict><key>scope</key><string>keyword, storage, entity.name.tag</string><key>settings</key><dict><key>foreground</key><string>#C9AE6E</string></dict></dict>
+    <dict><key>scope</key><string>string, markup.inserted</string><key>settings</key><dict><key>foreground</key><string>#A9BA94</string></dict></dict>
+    <dict><key>scope</key><string>constant, entity.name.function, support.function</string><key>settings</key><dict><key>foreground</key><string>#D7BE8D</string></dict></dict>
+    <dict><key>scope</key><string>invalid, markup.deleted</string><key>settings</key><dict><key>foreground</key><string>#C08A82</string></dict></dict>
+  </array>
+</dict></plist>

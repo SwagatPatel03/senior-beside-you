@@ -1,6 +1,7 @@
 // What the Senior panel shows, and what the editor remembers for the project story.
 
 import * as vscode from 'vscode';
+import { agentHost } from './setup.ts';
 import { appendEvent, findRoot } from '../../../plugin/core/index.mjs';
 import type { ActivePiece, Activity, Connection, Gear, JournalEntry, LevelsView, MemoryView, PanelMeta, PanelState, PanelView, ReplayPlace, ReplaySummary, ReplayView, SayKind, Stats, StepInfo } from './panel/protocol.ts';
 
@@ -120,6 +121,8 @@ export class SessionStore implements vscode.Disposable {
 
   connection(): Connection {
     return {
+      host: agentHost(),
+      agentFound: this.claudeFound,
       lastCallSecondsAgo: this.lastBridgeCall === null ? null : Math.round((Date.now() - this.lastBridgeCall) / 1000),
       claudeFound: this.claudeFound,
       pluginInstalled: this.pluginInstalled,

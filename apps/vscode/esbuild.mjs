@@ -6,6 +6,7 @@ import { context } from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildCodex } from '../../scripts/build-codex.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const production = process.argv.includes('--production');
@@ -61,6 +62,7 @@ function copyFontLicence() {
 // Start from an empty dist/ so no source map or old package from a development build is shipped.
 fs.rmSync(path.join(here, 'dist'), { recursive: true, force: true });
 copyRegrets();
+buildCodex(path.join(here, 'dist', 'senior-codex'));
 copyFontLicence();
 const contexts = await Promise.all(builds.map((b) => context(b)));
 if (watch) {

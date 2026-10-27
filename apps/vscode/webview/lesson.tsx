@@ -191,7 +191,7 @@ export function ChoiceCard({ entry }: { entry: Entry<'choice'> }) {
           </div>
         </div>
       )}
-      {chosen === undefined && !warned && <p class="quiet">Or tell Senior in your own words in Claude Code.</p>}
+      {chosen === undefined && !warned && <p class="quiet">Or tell Senior in your own words in your coding agent.</p>}
     </section>
   );
 }

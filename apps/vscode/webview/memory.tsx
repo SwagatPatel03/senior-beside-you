@@ -40,7 +40,7 @@ export function Memory({ memory, focus }: { memory: MemoryView | null; focus: { 
       <section class="memory empty">
         <p>This folder does not use Senior yet, so it has no decisions or plans to show.</p>
         <p class="quiet">
-          Run <code>/senior:onboard</code> in Claude Code to start. In an empty folder it starts a design session, which records the first decisions and a plan.
+          Ask Senior to onboard this project in your coding agent. In an empty folder it starts a design session, which records the first decisions and a plan.
         </p>
       </section>
     );

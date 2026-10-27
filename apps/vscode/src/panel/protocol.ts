@@ -225,6 +225,8 @@ export interface ActivePiece {
 }
 
 export interface Connection {
+  host?: 'claude' | 'codex';
+  agentFound?: boolean | 'unknown';
   /** Seconds since Claude Code last called the editor bridge, or null if it never has. */
   lastCallSecondsAgo: number | null;
   claudeFound: boolean | 'unknown';
@@ -320,6 +322,7 @@ export type FromPanel =
   | { type: 'showDecision'; id: string }
   | { type: 'setView'; view: PanelView }
   | { type: 'setup' }
+  | { type: 'setAgent'; host: 'claude' | 'codex' }
   | { type: 'copy'; text: string }
   | { type: 'toggleReadAloud' }
   | { type: 'setLevel'; tech: string; level: number }

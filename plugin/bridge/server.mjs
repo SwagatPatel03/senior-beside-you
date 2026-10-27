@@ -10,8 +10,9 @@ import { serveMcp } from './mcp.mjs';
 import { INSTRUCTIONS, TOOLS } from './tools.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const manifest = JSON.parse(fs.readFileSync(path.join(here, '..', '.claude-plugin', 'plugin.json'), 'utf8'));
-const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+const portable = path.join(here, '..', 'plugin.json');
+const manifest = JSON.parse(fs.readFileSync(fs.existsSync(portable) ? portable : path.join(here, '..', '.claude-plugin', 'plugin.json'), 'utf8'));
+const projectDir = (process.env.SENIOR_HOST !== 'codex' && process.env.CLAUDE_PROJECT_DIR) || process.cwd();
 
 function notConnected() {
   const open = listEditors().flatMap((e) => e.workspaceFolders || []);
@@ -26,7 +27,7 @@ function notConnected() {
 
 serveMcp({
   info: { name: 'senior-editor', version: manifest.version },
-  instructions: INSTRUCTIONS,
+  instructions: process.env.SENIOR_HOST === 'codex' ? INSTRUCTIONS.replace(/\/senior:([a-z-]+)/g, '$senior:$1') : INSTRUCTIONS,
   tools: TOOLS,
   async call(name, args, { signal }) {
     const editor = findEditor(projectDir);

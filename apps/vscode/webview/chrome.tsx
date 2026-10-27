@@ -22,9 +22,10 @@ export function Spectacles({ size = 18 }: { size?: number }) {
 
 function connectionLabel(state: PanelState): { text: string; live: boolean } {
   const ago = state.connection.lastCallSecondsAgo;
-  if (ago !== null && ago < 120) return { text: 'Claude Code is with you', live: true };
-  if (ago !== null) return { text: `Claude Code was here ${Math.max(1, Math.round(ago / 60))} min ago`, live: false };
-  return { text: 'Waiting for Claude Code', live: false };
+  const agent = state.connection.host === 'codex' ? 'Codex' : 'Claude Code';
+  if (ago !== null && ago < 120) return { text: `${agent} is with you`, live: true };
+  if (ago !== null) return { text: `${agent} was here ${Math.max(1, Math.round(ago / 60))} min ago`, live: false };
+  return { text: `Waiting for ${agent}`, live: false };
 }
 
 function duration(ms: number): string {
@@ -53,7 +54,7 @@ function ActivityLine({ activity }: { activity: Activity | null }) {
   const line = activityLine(activity, now);
   if (!line) return null;
   return (
-    <p class={`activity ${busy ? 'busy' : ''}`} role="status" title="What Claude Code is doing right now">
+    <p class={`activity ${busy ? 'busy' : ''}`} role="status" title="What Senior is doing right now">
       <span class="dot" aria-hidden="true" />
       {line}
     </p>
@@ -205,31 +206,39 @@ function Keys({ keys }: { keys: string[] }) {
 }
 
 export function Welcome({ state }: { state: PanelState }) {
-  const { claudeFound, pluginInstalled } = state.connection;
+  const { pluginInstalled } = state.connection;
+  const host = state.connection.host ?? 'claude';
+  const agent = host === 'codex' ? 'Codex' : 'Claude Code';
+  const found = state.connection.agentFound ?? state.connection.claudeFound;
+  const start = host === 'codex' ? '$senior:pair add CSV export for bookings' : START;
   return (
     <section class="welcome">
       <h1>A senior developer beside you</h1>
       <p class="lede">You write the lines that carry the logic. Senior fills in the boilerplate, explains each decision at the moment it matters, and remembers why, so you can tell the story of your code months later.</p>
 
       <ol class="setup">
-        <li class={claudeFound === true ? 'done' : ''}>
-          <span class="label">Claude Code</span>
-          {claudeFound === true && <span>Found on this computer.</span>}
-          {claudeFound === false && (
+        <li class={found === true ? 'done' : ''}>
+          <label class="label" for="senior-agent">Coding agent</label>
+          <select id="senior-agent" value={host} onChange={(event) => send({ type: 'setAgent', host: event.currentTarget.value as 'claude' | 'codex' })}>
+            <option value="claude">Claude Code</option>
+            <option value="codex">Codex</option>
+          </select>
+          {found === true && <span>{agent} is on this computer.</span>}
+          {found === false && (
             <span>
-              Not found. Install Claude Code, then reopen this window.
+              Not found. Install {agent}, then reopen this window.
             </span>
           )}
-          {claudeFound === 'unknown' && <span>Checking…</span>}
+          {found === 'unknown' && <span>Checking…</span>}
         </li>
         <li class={pluginInstalled === true ? 'done' : ''}>
           <span class="label">The senior plugin</span>
           {pluginInstalled === true ? (
-            <span>Installed in Claude Code.</span>
+            <span>Installed in {agent}.</span>
           ) : (
             <>
-              <span>Not installed yet. It adds the pairing skill and connects Claude Code to this editor.</span>
-              <button class="setup-button" onClick={() => send({ type: 'setup' })} disabled={claudeFound !== true}>
+              <span>{pluginInstalled === 'unknown' ? 'Installation has not been confirmed.' : 'Not installed yet.'} It adds pairing and connects {agent} to this editor.</span>
+              <button class="setup-button" onClick={() => send({ type: 'setup' })} disabled={found !== true}>
                 Set it up
               </button>
             </>
@@ -250,8 +259,8 @@ export function Welcome({ state }: { state: PanelState }) {
         <li>
           <span class="label">Start pairing</span>
           <span>
-            In Claude Code, run <code>/senior:pair</code> followed by what you want to build.{' '}
-            <button class="link" onClick={() => send({ type: 'copy', text: START })}>
+            In {agent}, run <code>{host === 'codex' ? '$senior:pair' : '/senior:pair'}</code> followed by what you want to build.{' '}
+            <button class="link" onClick={() => send({ type: 'copy', text: start })}>
               Copy an example
             </button>
           </span>

@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { findRoot, seniorPath } from '../core/paths.mjs';
 import { appendEvent, sessionLogPath } from '../core/sessions.mjs';
+import { normalizeInput } from '../codex/normalize.mjs';
 
 /**
  * Record an event for this session. When `.senior/` was created partway through a session (the
@@ -24,12 +25,15 @@ export async function readInput() {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
   const raw = Buffer.concat(chunks).toString('utf8');
-  return raw.trim() ? JSON.parse(raw) : {};
+  const input = raw.trim() ? JSON.parse(raw) : {};
+  return process.env.SENIOR_HOST === 'codex' ? normalizeInput(input) : input;
 }
 
 /** The project root that holds `.senior/`, or null when senior is not set up in this project. */
 export function projectRoot(input) {
-  return findRoot(process.env.CLAUDE_PROJECT_DIR) || findRoot(input.cwd);
+  return process.env.SENIOR_HOST === 'codex'
+    ? findRoot(input.cwd)
+    : findRoot(process.env.CLAUDE_PROJECT_DIR) || findRoot(input.cwd);
 }
 
 export function debug(root, label, value) {

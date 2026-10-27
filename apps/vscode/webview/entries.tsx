@@ -208,7 +208,7 @@ export function Entry({ entry }: { entry: JournalEntry }) {
     case 'question':
       return (
         <article class={`asked ${entry.answered ? 'answered' : ''}`}>
-          <span class="label">You asked{entry.answered ? '' : ' · waiting for Claude Code'}</span>
+          <span class="label">You asked{entry.answered ? '' : ' · waiting for Senior'}</span>
           <p>{entry.text}</p>
           {entry.where && <code class="where">{entry.where}</code>}
         </article>

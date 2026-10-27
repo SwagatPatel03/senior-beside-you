@@ -13,6 +13,20 @@ function clip(text, max = MAX_TEXT) {
   return s.length > max ? `${s.slice(0, max)}\n[cut]` : s;
 }
 
+// Codex rollouts are best-effort input: their transcript format is not a stable hook API.
+// Read public assistant messages and tool ids only; analysis/reasoning records stay private.
+function transcriptBlocks(entry) {
+  if (entry?.type === 'assistant' && Array.isArray(entry.message?.content)) return entry.message.content;
+  if (entry?.type !== 'response_item') return [];
+  const p = entry.payload;
+  if (!p || p.channel === 'analysis') return [];
+  if (p.type === 'message' && p.role === 'assistant') {
+    return (p.content || []).filter((b) => b.type === 'output_text').map((b) => ({ type: 'text', text: b.text }));
+  }
+  if (['function_call', 'custom_tool_call'].includes(p.type) && p.call_id) return [{ type: 'tool_use', id: p.call_id }];
+  return [];
+}
+
 /** Map each tool call id to the words the agent wrote just before the call. */
 export function reasonsFromTranscript(file) {
   const reasons = new Map();
@@ -26,8 +40,7 @@ export function reasonsFromTranscript(file) {
     } catch {
       continue;
     }
-    const content = entry?.message?.content;
-    if (entry?.type !== 'assistant' || !Array.isArray(content)) continue;
+    const content = transcriptBlocks(entry);
     for (const block of content) {
       // Only what the agent said out loud counts as its reason. Its private reasoning stays out.
       if (block.type === 'text' && block.text?.trim()) lastWords = block.text.trim();
@@ -51,8 +64,7 @@ export function closingWords(file) {
     } catch {
       continue;
     }
-    const content = entry?.message?.content;
-    if (entry?.type !== 'assistant' || !Array.isArray(content)) continue;
+    const content = transcriptBlocks(entry);
     for (const block of content) {
       if (block.type === 'tool_use') closing = '';
       else if (block.type === 'text' && block.text?.trim()) closing = block.text.trim();

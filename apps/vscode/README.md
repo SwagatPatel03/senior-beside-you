@@ -159,3 +159,10 @@ The colours of the slot you are writing in, the hints and the highlights follow 
 ## License
 
 MIT
+## Codex support
+
+Choose **Codex** in the Senior welcome panel and click **Set it up**, or use the command
+**Senior: Set up Codex for Senior**. Restart Codex, review Senior in `/hooks`, then invoke
+`$senior:onboard` or `$senior:pair`. Codex uses the same panel, guided typing, decisions,
+levels and replays. See [Codex setup](../../docs/codex.md) for installation and native
+terminal customization limits.

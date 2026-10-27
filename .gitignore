@@ -1,4 +1,5 @@
 node_modules/
+dist/
 .senior/sessions/
 .senior/state/
 plugin/tsconfig.json

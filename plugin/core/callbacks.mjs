@@ -35,7 +35,7 @@ function editedContent(toolInput = {}) {
 /** Describe what a tool call did, in the terms the ledger understands. */
 export function describeTouch(root, input) {
   const tool = input.tool_name || '';
-  const failedEvent = input.hook_event_name === 'PostToolUseFailure';
+  const failedEvent = input.hook_event_name === 'PostToolUseFailure' || input.tool_response?.isError === true;
   const ti = input.tool_input || {};
 
   if (EDIT_TOOLS.has(tool)) {
@@ -45,8 +45,11 @@ export function describeTouch(root, input) {
   }
 
   if (tool === 'Bash' || tool === 'PowerShell') {
-    const output = failedEvent ? textOf(input.error) : textOf(input.tool_response);
-    const failed = failedEvent || FAILURE_MARKERS.test(output);
+    const output = failedEvent ? textOf(input.error ?? input.tool_response) : textOf(input.tool_response);
+    const response = input.tool_response;
+    const exitCode = response?.exit_code ?? response?.exitCode;
+    const failed = failedEvent || (typeof exitCode === 'number' && exitCode !== 0)
+      || /(?:Process exited with code|Exit code:)\s*[1-9]\d*/.test(output) || FAILURE_MARKERS.test(output);
     if (!failed) return { kind: 'command', tool, command: ti.command || '', files: [], text: '' };
     return { kind: 'failure', tool, command: ti.command || '', files: pathsInText(root, output), text: output, snippet: output.slice(-800) };
   }

@@ -26,6 +26,17 @@ function editChange(input) {
 }
 
 await runHook(async (input, root) => {
+  const changes = input.senior_edits;
+  const inputs = changes ? changes.map((tool_input) => ({ ...input, tool_input })) : [input];
+  const messages = [];
+  for (const item of inputs) {
+    const message = recordTool(item, root);
+    if (message) messages.push(message);
+  }
+  if (messages.length) addContext(input.hook_event_name || 'PostToolUse', messages.join('\n\n'));
+});
+
+function recordTool(input, root) {
   const sessionId = input.session_id;
   const touch = describeTouch(root, input);
   const toolUseId = input.tool_use_id || undefined;
@@ -49,5 +60,5 @@ await runHook(async (input, root) => {
   if (!hits.length) return;
   saveState(root, sessionId, state);
   for (const h of hits) appendEvent(root, sessionId, { type: 'callback', decision: h.entry.id, trigger: h.trigger, reasons: h.reasons });
-  addContext(input.hook_event_name || 'PostToolUse', callbackMessage(hits, touch));
-});
+  return callbackMessage(hits, touch);
+}

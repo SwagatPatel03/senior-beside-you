@@ -22,6 +22,9 @@ exports.run = async function run() {
   const top = fs.readdirSync(extension.extensionPath).map((f) => f.toLowerCase());
   for (const name of ['readme.md', 'changelog.md', 'license.txt']) assert.ok(top.includes(name), `the package contains ${name}`);
   const regrets = fs.readdirSync(path.join(extension.extensionPath, 'dist', 'regrets')).filter((f) => f.endsWith('.md'));
+  for (const rel of ['.agents/plugins/marketplace.json', 'codex/plugin.json', 'codex/codex/hook.mjs', 'codex/skills/pair/SKILL.md', 'codex/bridge/server.mjs']) {
+    assert.ok(fs.existsSync(path.join(extension.extensionPath, 'dist/senior-codex', rel)), `Codex setup contains ${rel}`);
+  }
   assert.ok(regrets.length >= 10, 'the package carries the regret library');
   for (const rel of ['src', 'test', 'webview', 'node_modules']) assert.ok(!fs.existsSync(path.join(extension.extensionPath, rel)), `the package leaves out ${rel}/`);
   assert.ok(!fs.readdirSync(path.join(extension.extensionPath, 'dist')).some((f) => f.endsWith('.map')), 'the package has no source maps');

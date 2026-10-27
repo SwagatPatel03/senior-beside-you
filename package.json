@@ -13,6 +13,8 @@
     "node": ">=22"
   },
   "scripts": {
+    "build:codex": "node scripts/build-codex.mjs",
+    "test:codex": "node scripts/test-codex.mjs",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test:plugin && npm run test --workspaces --if-present",
