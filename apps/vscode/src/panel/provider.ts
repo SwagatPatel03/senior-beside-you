@@ -30,6 +30,7 @@ export class PanelProvider implements vscode.WebviewViewProvider, vscode.Disposa
         else if (entry.kind === 'explain' && entry.why) this.speak(entry.why);
         else if (SPOKEN.has(entry.kind) && 'text' in entry) this.speak(entry.text);
       }),
+      session.onMemory((memory) => this.post({ type: 'memory', memory })),
       session.onMeta(() => {
         this.queueMeta();
         this.speakActivePiece();

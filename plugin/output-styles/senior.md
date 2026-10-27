@@ -30,6 +30,7 @@ Speak at five kinds of moments: decisions, risks, surprises, failures and payoff
 5. **Never quiz the user.** Do not ask "what do you think this does?" Teach by saying what you are doing and why.
 6. **Ask the user only for facts that only they know:** requirements, limits, deadlines, who the users are, and what already exists outside the code. Do not ask the user to choose between technical options they cannot judge. Pick the right option, say why in one sentence, and record it.
 7. **Keep steps small.** No step should be bigger than the user can review in about a minute.
+8. **Match the user's level.** The user rates how well they know each technology from 0 to 10, and the session start lists those levels. Before explaining or writing code in a technology, run the Senior CLI command `level profile <technology or path>` and follow it. At low levels, explain every technical word the first time you use it and keep each step tiny; at high levels, say less. The goal is always that the user understands the code at the end.
 
 ## Answering "why?"
 

@@ -50,6 +50,7 @@ Open your project and start Claude Code in its folder. Start with `/senior:onboa
 | `/senior:onboard [area]` | The place to start. Maps the codebase once, writes `.senior/repo-map.md`, and on the first day records the existing choices you confirm as decisions. In an empty folder, it starts the design session. |
 | `/senior:design <feature>` | Before code: asks the two or three questions that change the design, names the three things most likely to hurt later, confirms examples that become the first tests, sorts decisions into one-way and two-way, records them, and saves a step-by-step plan. |
 | `/senior:pair <feature>` | Builds the plan with you in VS Code. You type the important lines over a plan traced in your file, the routine code is filled in, each step is checked by running it, and each decision is linked to the code that carries it out. While you type one step, a navigator prepares the next in the background, so there is no wait between steps. Runs the design session first if there is no plan. Use `/senior:pair continue <feature>` to pick up a plan. |
+| `/senior:level [technology] [0-10]` | Rate how well you know each technology in the project, from 0 (never written it) to 10 (you decide, Senior types). Senior changes how much you type, how small each piece is and how much it explains, separately for each technology. Your levels follow you to every project. |
 | `/senior:fast <task>` | The fast lane for deadline days. One quick pushback when the task as asked breaks a recorded decision or walks into a known failure, then full speed. Every edit and command is recorded with the reason given for it. |
 | `/senior:replay` | Turns the last session into a replay of three to eight scenes, and walks you through it in the Senior panel or in the terminal. You can stop on any scene and ask why. |
 | `/senior:why <question>` | Answers "why is it like this?" from the decision ledger, then carries on. |
@@ -60,6 +61,26 @@ Open your project and start Claude Code in its folder. Start with `/senior:onboa
 For narration in the terminal that follows the senior's rules (one line before each step, quiet during boilerplate, expected results written before running, and "Verified / Not verified" at the end), run `/output-style senior:Senior`. In a settings file the name needs the plugin prefix: `"outputStyle": "senior:Senior"`.
 
 Callbacks need no command. When an edit or a failure touches code linked to an earlier decision, the senior brings that decision back. Matching is by file path and symbol name, never by guessing from words.
+
+### Knowledge levels
+
+Senior is there so that you understand your code at the end, so it works differently depending on how well you know each technology. You rate each one from 0 to 10 with `/senior:level`, in the design session for a new project, during onboarding for an existing one, or on the Levels page of the Senior panel. A technology you do not rate works at level 7, the way Senior always worked.
+
+| Level | Who it is for | What changes |
+| --- | --- | --- |
+| 0 | You have never written a line of it | One line at a time. A short card for each new idea, every word of the line explained, and a check every few lines. You type everything. |
+| 1 | You have seen it, but cannot write it | You read each small part with Senior first, then type it line by line. Imports are filled in. |
+| 2 | You can read it with help | You type the first of each kind of line; Senior fills in the repeats. |
+| 3 | You can follow a pattern | A pattern you have typed before comes back as a shape, with the names left blank behind a hint. |
+| 4 | You can write small parts | Only the first line is traced; plain sentences say what the rest should do. |
+| 5 | You know the basics, but slowly | No trace. A list says what to write and which names to use. |
+| 6 | You work alone, but miss the idioms | You write it your way, then see the usual way side by side and choose. |
+| 7 | You work in it every week | Senior as it always was: you type the spine over the trace. |
+| 8 | You are fluent | Tab accepts the trace; you type only the lines that carry a decision. |
+| 9 | You could teach it | Senior types while you watch, and stops at hard-to-undo decisions. |
+| 10 | You want to decide, not type | You choose between options; Senior writes every line and shows you the result. |
+
+Each piece takes the level of its own technology, so in one step a Java piece can be at 0 while a SQL piece is at 1. Your levels live in `~/.senior/levels.json` and follow you to every project, together with the words Senior has already explained to you, so no word is explained twice. The project's technologies are found from its files and saved in `.senior/stack.json`. A level changes how a step is taught, never the plan or the ledger. Senior never tests you to find your level; at most once a session it may suggest moving one up or down, based only on what happened in the editor, and only you change the number.
 
 ### How Senior looks in the terminal
 
@@ -88,7 +109,7 @@ The first design session creates `.senior/` in your project. The hooks do nothin
 
 Commit the rest of `.senior/` with your code. It is the memory of why your code is the way it is.
 
-You do not have to read these files yourself. In VS Code, each decision shows as a line above the code it is about, and its whole record opens in the Senior panel. See [Decisions in the code](apps/vscode/README.md#decisions-in-the-code).
+You do not have to read these files yourself. In VS Code, each decision shows as a line above the code it is about, and its whole record opens in the Senior panel. The panel's **Decisions and plans** page lists every decision and plan, even before any code exists. See [Decisions in the code](apps/vscode/README.md#decisions-in-the-code).
 
 ## How the editor connection works
 

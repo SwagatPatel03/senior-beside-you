@@ -3,6 +3,8 @@ import { useEffect, useReducer, useRef } from 'preact/hooks';
 import type { JournalEntry, PanelState, ToPanel } from '../src/panel/protocol.ts';
 import { ActiveBar, Composer, Header, Meter, Welcome } from './chrome.tsx';
 import { Entry } from './entries.tsx';
+import { Levels } from './levels.tsx';
+import { Memory } from './memory.tsx';
 import { go, ReplayNav, ReplayScene } from './replay.tsx';
 import './styles.css';
 import { send } from './vscode.ts';
@@ -23,6 +25,8 @@ function reduce(state: PanelState | null, action: Action): PanelState | null {
     }
     case 'meta':
       return state ? { ...state, ...action.meta } : state;
+    case 'memory':
+      return state ? { ...state, memory: action.memory } : state;
     default:
       return state;
   }
@@ -85,6 +89,28 @@ function App() {
           <Composer placeholder="Ask why about this scene" />
           {!live && <p class="meter quiet">Claude Code answers questions while /senior:replay is running.</p>}
         </footer>
+      </div>
+    );
+  }
+
+  if (state.view === 'levels') {
+    return (
+      <div class="app">
+        <Header state={state} />
+        <main class="journal levels-page">
+          <Levels levels={state.levels} />
+        </main>
+      </div>
+    );
+  }
+
+  if (state.view === 'memory') {
+    return (
+      <div class="app">
+        <Header state={state} />
+        <main class="journal memory-page">
+          <Memory memory={state.memory} focus={state.focus} />
+        </main>
       </div>
     );
   }

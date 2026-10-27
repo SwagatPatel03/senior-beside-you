@@ -415,12 +415,12 @@ test('a decision shows above the code it is about, with the whole decision on ho
   await vscode.commands.executeCommand('senior.decisionWhy', doc.uri, 2, 15);
   assert.deepEqual([editor.selection.active.line, editor.selection.active.character], [2, 15]);
 
-  const before = api.session.snapshot().journal.length;
+  // "Full record" opens the memory page at the decision, with its record read fresh.
   await vscode.commands.executeCommand('senior.showDecision', decision.id);
-  const added = api.session.snapshot().journal.slice(before);
-  assert.equal(added.length, 1);
-  assert.equal(added[0].kind, 'decision');
-  const detail = added[0].decision;
+  const shown = api.session.snapshot();
+  assert.equal(shown.view, 'memory');
+  assert.equal(shown.focus.id, decision.id);
+  const detail = shown.memory.decisions.find((d) => d.id === decision.id);
   assert.equal(detail.undo, 'Hard to undo');
   assert.deepEqual(detail.checks.map((c) => c.label), ['The regret library', 'An independent review', 'Established practice']);
   assert.ok(detail.history.some((h) => /an edit touched reserveSlot, and the senior brought this decision back/.test(h)), detail.history.join(' | '));
@@ -446,6 +446,49 @@ test('a decision shows above the code it is about, with the whole decision on ho
   }
 });
 
+test('decisions that no code carries out yet, and the plans, are on the memory page and open it when recorded', async () => {
+  const core = await import(require('node:url').pathToFileURL(path.resolve(__dirname, '../../../../plugin/core/index.mjs')).href);
+  // Right after a design session, no step is running.
+  api.session.step = null;
+  api.session.active = null;
+  api.session.setView('session');
+
+  const decision = core.addEntry(workspace, {
+    title: 'Send email after the booking is saved',
+    reversibility: 'two-way',
+    chosen: 'An outbox row written in the same transaction',
+    why: 'An email sent before the commit can describe a booking that never happened.',
+    feature: 'class-booking',
+  });
+  core.savePlan(workspace, {
+    feature: 'class-booking',
+    title: 'Book a class',
+    goal: 'Members book a place without double bookings.',
+    decisions: [`${decision.id} Send email after the booking is saved`],
+    examples: ['Two members press Book at once: one gets the place.'],
+    steps: [
+      { title: 'Set up the project with a passing test', why: 'Every later step needs a place to prove itself.', expect: 'One test passes.', status: 'done' },
+      { title: 'Write the outbox', why: 'The email must wait for the commit.', expect: 'The outbox test passes.', risk: 'An email for a booking that rolled back.' },
+    ],
+  });
+
+  const memory = await until(() => {
+    const s = api.session.snapshot();
+    return s.view === 'memory' && s.memory?.plans.some((p) => p.feature === 'class-booking') && s.memory.decisions.some((d) => d.id === decision.id) ? s.memory : null;
+  }, 'the memory page to open with the new decision and plan');
+  const unlinked = memory.decisions.find((d) => d.id === decision.id);
+  assert.deepEqual([unlinked.files, unlinked.symbols], [[], []]);
+  const plan = memory.plans.find((p) => p.feature === 'class-booking');
+  assert.deepEqual([plan.done, plan.total], [1, 2]);
+  assert.deepEqual(plan.decisions, [{ id: decision.id, title: 'Send email after the booking is saved' }]);
+  assert.equal(plan.steps[1].risk, 'An email for a booking that rolled back.');
+
+  // The command from the status bar opens the same page.
+  api.session.setView('session');
+  await vscode.commands.executeCommand('senior.showMemory');
+  assert.equal(api.session.snapshot().view, 'memory');
+});
+
 test('the computer\'s own voice reads narration aloud, and the panel only offers it when there is one', async () => {
   const available = await api.voice.ready;
   await until(() => api.session.speech !== 'unknown', 'the voice check');
@@ -465,6 +508,124 @@ test('the computer\'s own voice reads narration aloud, and the panel only offers
   api.voice.stop();
   await api.voice.say('This sentence starts the speaker again after a stop.');
   assert.equal(api.voice.lastError, null);
+});
+
+// Knowledge levels. These run last: the level set here would change how earlier pieces are guided.
+
+test('at level 3 names hide behind hints, Show me brings the line back, and the user still types it', async () => {
+  const pending = call('guide', {
+    pieces: [{ file: 'src/shape.js', kind: 'spine', where: 'new_file', text: 'const total = sum(items);', why: 'Add the prices up.', tech: 'javascript', level: 3, blanks: [{ text: 'sum', hint: 'add them up' }] }],
+  });
+  await until(() => api.session.active, 'the piece');
+  assert.equal(api.session.active.teach.trace, 'shape');
+  assert.deepEqual(api.guide.inspect().shown, ['const total = ⟨add them up⟩(items);']);
+  // Tab never takes a piece the user is learning to write, whatever the gear.
+  await api.session.setGear('accept');
+  await vscode.commands.executeCommand('senior.acceptPiece');
+  assert.ok(api.session.active, 'the piece is still the user\'s to type');
+  await api.session.setGear('type');
+  await vscode.commands.executeCommand('senior.showMe');
+  await until(() => api.guide.inspect() && api.guide.inspect().revealed, 'the full trace');
+  assert.deepEqual(api.guide.inspect().shown, ['const total = sum(items);']);
+  assert.equal(api.session.active.revealed, true);
+  await typeLikeAPerson('const total = sum(items);');
+  const { result } = await pending;
+  assert.equal(result.results[0].status, 'typed');
+  const pieces = api.session.snapshot().journal.filter((e) => e.kind === 'pieces').pop();
+  assert.equal(pieces.pieces[0].revealed, true, 'the panel remembers that the user asked to see the code');
+});
+
+test('at level 4 only the first line is traced, plain sentences say what the rest does, and Done keeps the user\'s version', async () => {
+  const pending = call('guide', {
+    pieces: [
+      {
+        file: 'src/area.js',
+        kind: 'spine',
+        where: 'new_file',
+        text: 'function area(w, h) {\n  return w * h;\n}',
+        why: 'The area of a rectangle.',
+        tech: 'javascript',
+        level: 4,
+        outline: ['Return the width times the height.', 'Close the function.'],
+      },
+    ],
+  });
+  await until(() => api.session.active, 'the piece');
+  const shown = api.guide.inspect();
+  assert.equal(shown.trace, 'first');
+  assert.deepEqual(shown.shown, ['function area(w, h) {', '', '']);
+  assert.deepEqual(shown.notes, ['Return the width times the height.', 'Close the function.']);
+  await typeLikeAPerson('function area(w, h) {', { untilDone: false });
+  await vscode.commands.executeCommand('senior.nextLine');
+  // The editor closed the brace by itself; it goes when the cursor leaves the line, as a person pauses.
+  await until(() => vscode.window.activeTextEditor.document.lineAt(0).text === 'function area(w, h) {', 'the stray brace to go');
+  await typeLikeAPerson('return h * w;', { untilDone: false });
+  await sleep(100);
+  assert.equal(api.session.active.diverged, undefined, 'a version written from a description is not flagged as wrong');
+  await vscode.commands.executeCommand('senior.pieceDone');
+  const { result } = await pending;
+  assert.equal(result.results[0].status, 'kept_own');
+  assert.match(result.results[0].text, /return h \* w;/);
+});
+
+test('at level 5 nothing is traced, and the panel carries the list and the names', async () => {
+  const pending = call('guide', {
+    pieces: [{ file: 'src/half.js', kind: 'spine', where: 'new_file', text: 'const half = (n) => n / 2;', why: 'Half of a number.', tech: 'javascript', level: 5, todo: ['Divide the number by two.'], names: ['half'] }],
+  });
+  await until(() => api.session.active, 'the piece');
+  assert.deepEqual(api.guide.inspect().shown, ['']);
+  assert.deepEqual(api.session.active.teach.todo, ['Divide the number by two.']);
+  assert.deepEqual(api.session.active.teach.names, ['half']);
+  // Done does nothing on an empty piece: there is nothing of the user's to keep yet.
+  await api.guide.action('done');
+  assert.ok(api.session.active);
+  await typeLikeAPerson('const half = (n) => n / 2;');
+  const { result } = await pending;
+  assert.equal(result.results[0].status, 'typed', 'a version that matches the plan completes by itself');
+});
+
+test('a choice waits for the user\'s pick and reports it to Claude', async () => {
+  const options = [
+    { label: 'Lock the row', detail: 'The second customer waits.', pick: true },
+    { label: 'Check, then save', detail: 'Two customers can pass the check together.', risk: 'R-bookings-01', pushback: 'Two customers can both get the seat.' },
+  ];
+  const pending = call('offer_choice', { question: 'How should a hold stop two customers?', options });
+  const entry = await until(() => api.session.snapshot().journal.find((e) => e.kind === 'choice' && e.chosen === undefined), 'the choice');
+  api.handlers.choose(entry.id, 1);
+  const { result } = await pending;
+  assert.deepEqual([result.status, result.option, result.label, result.pushedBack], ['chosen', 1, 'Check, then save', true]);
+  assert.equal(api.session.snapshot().journal.find((e) => e.id === entry.id).chosen, 1);
+});
+
+test('a level set in the editor reaches Claude, and a piece without a level takes the user\'s level for its file', async () => {
+  try {
+    api.levels.set('javascript', 2);
+    const notice = api.session.snapshot().journal.filter((e) => e.kind === 'level').pop();
+    assert.deepEqual([notice.tech, notice.from, notice.to], ['javascript', null, 2]);
+    const { result } = await call('status');
+    assert.deepEqual(result.levelsChanged.map((c) => [c.tech, c.to]), [['javascript', 2]]);
+    assert.ok(result.levels.some((t) => t.tech === 'javascript' && t.level === 2));
+
+    const pending = call('guide', { pieces: [{ file: 'src/two.js', kind: 'spine', where: 'new_file', text: 'const two = 2;', why: 'A constant.' }] });
+    await until(() => api.session.active, 'the piece');
+    assert.deepEqual([api.session.active.teach.tech, api.session.active.teach.level], ['javascript', 2]);
+    await typeLikeAPerson('const two = 2;');
+    await pending;
+
+    // Ten easy pieces in a row at level 3 bring one suggestion, and a yes moves the level.
+    api.levels.set('javascript', 3);
+    for (let i = 0; i < 10; i++) api.levels.onPiece({ tech: 'javascript', level: 3, kind: 'spine', status: 'typed', revealed: false, newWords: 0 });
+    const suggestion = api.session.snapshot().journal.filter((e) => e.kind === 'suggestion').pop();
+    assert.deepEqual([suggestion.from, suggestion.to], [3, 4]);
+    api.levels.answerSuggestion(suggestion.id, 'yes');
+    assert.equal(JSON.parse(fs.readFileSync(process.env.SENIOR_LEVELS_FILE, 'utf8')).levels.javascript.level, 4);
+    // Only once a session.
+    for (let i = 0; i < 10; i++) api.levels.onPiece({ tech: 'javascript', level: 4, kind: 'spine', status: 'typed', revealed: false, newWords: 0 });
+    assert.equal(api.session.snapshot().journal.filter((e) => e.kind === 'suggestion').length, 1);
+  } finally {
+    fs.rmSync(process.env.SENIOR_LEVELS_FILE, { force: true });
+    api.levels.refresh(true);
+  }
 });
 
 exports.run = async function run() {

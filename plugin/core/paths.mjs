@@ -7,6 +7,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 export const SENIOR_DIR = '.senior';
+// Skills write a decision, plan or replay here as JSON and pass it to the CLI with --file, because
+// heredocs fail in PowerShell. Each file holds one input and is removed once that input is saved.
+export const INBOX = `${SENIOR_DIR}/inbox`;
 const caseInsensitive = process.platform === 'win32';
 
 /**
@@ -55,6 +58,11 @@ export function toRel(root, p) {
   const rel = path.relative(root, abs);
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
   return rel.replace(/\\/g, '/');
+}
+
+/** Whether a project-relative path lies in `.senior/inbox/`. */
+export function inInbox(rel) {
+  return typeof rel === 'string' && fold(rel).startsWith(fold(`${INBOX}/`));
 }
 
 function fold(s) {

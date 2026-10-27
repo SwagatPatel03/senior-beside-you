@@ -114,6 +114,8 @@ test('a session that creates .senior/ partway through still records its transcri
   const transcript = path.join(root, 'transcript.jsonl');
   const base = { session_id: 'late', cwd: root, transcript_path: transcript, hook_event_name: 'PostToolUse' };
   runHook('on-tool.mjs', { ...base, tool_name: 'Write', tool_input: { file_path: path.join(os.tmpdir(), 'scratch.json'), content: '{}' } }, root);
+  // A decision written to the inbox for the CLI is Senior's own input, not part of the project's story.
+  runHook('on-tool.mjs', { ...base, tool_name: 'Write', tool_input: { file_path: path.join(root, '.senior', 'inbox', 'd-1.json'), content: '{}' } }, root);
   runHook('on-tool.mjs', { ...base, tool_name: 'Edit', tool_input: { file_path: path.join(root, 'src', 'invoice.js'), old_string: 'a', new_string: 'b' } }, root);
 
   const recorded = events(root, 'late');

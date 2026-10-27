@@ -132,6 +132,41 @@ test('the CLI saves a plan with its brief and a replay', () => {
   assert.match(list.stdout, /Export \(1 scenes\)/);
 });
 
+test('the CLI reads JSON from an inbox file and removes the file once it is saved', () => {
+  const root = project();
+  const inbox = path.join(root, '.senior', 'inbox');
+  fs.mkdirSync(inbox, { recursive: true });
+  const decision = { title: 'Bookings are atomic', reversibility: 'one-way', chosen: 'A unique index', why: 'Only the database sees every request.' };
+  // The Write tool on some systems adds a byte order mark, and the command may run from a subfolder.
+  fs.writeFileSync(path.join(inbox, 'd-booking.json'), `${String.fromCharCode(0xfeff)}${JSON.stringify(decision)}`);
+  const sub = path.join(root, 'src');
+  fs.mkdirSync(sub);
+  const add = spawnSync(process.execPath, [cli, 'ledger', 'add', '--file', '.senior/inbox/d-booking.json'], { cwd: sub, encoding: 'utf8' });
+  assert.equal(add.status, 0, add.stderr);
+  assert.match(add.stdout, /Recorded D-001: Bookings are atomic/);
+  assert.ok(!fs.existsSync(path.join(inbox, 'd-booking.json')), 'the inbox file is removed');
+
+  // A decision that fails to save keeps its file, so it can be fixed and sent again.
+  fs.writeFileSync(path.join(inbox, 'bad.json'), JSON.stringify({ title: 'No reason given' }));
+  const bad = spawnSync(process.execPath, [cli, 'ledger', 'add', '--file', path.join(inbox, 'bad.json')], { cwd: root, encoding: 'utf8' });
+  assert.notEqual(bad.status, 0);
+  assert.ok(fs.existsSync(path.join(inbox, 'bad.json')));
+
+  // A file outside the inbox belongs to the user and is left alone.
+  fs.writeFileSync(path.join(root, 'plan.json'), JSON.stringify(planInput));
+  const plan = spawnSync(process.execPath, [cli, 'plan', 'save', '--file', 'plan.json'], { cwd: root, encoding: 'utf8' });
+  assert.equal(plan.status, 0, plan.stderr);
+  assert.ok(fs.existsSync(path.join(root, 'plan.json')));
+
+  const missing = spawnSync(process.execPath, [cli, 'ledger', 'add', '--file', '.senior/inbox/none.json'], { cwd: root, encoding: 'utf8' });
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /The file \.senior\/inbox\/none\.json does not exist/);
+
+  assert.ok(core.inInbox('.senior/inbox/d-1.json'));
+  assert.ok(!core.inInbox('.senior/ledger/D-001.json'));
+  assert.ok(!core.inInbox(null));
+});
+
 test('the regret library can be pointed at a bundled copy', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'seed '));
   fs.writeFileSync(path.join(dir, 'only.md'), '---\ntopic: only\ntitle: Only topic\n---\n\n## R-only-01: The one entry\nText.\n');

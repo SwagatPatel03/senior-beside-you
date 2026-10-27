@@ -7,6 +7,7 @@ allowed-tools:
   - Read
   - Glob
   - Grep
+  - Write
   - mcp__plugin_senior_editor__status
   - mcp__plugin_senior_editor__show_replay
   - mcp__plugin_senior_editor__say
@@ -26,7 +27,7 @@ The Senior CLI is `node "${CLAUDE_PLUGIN_ROOT}/cli/senior.mjs"`. Below it is wri
 - Otherwise run `senior replay material <session id, if one was given>`. It lists what the session did in order: the user's request, each edit with the text before and after, each command and failure, ledger callbacks, and the reason given just before each step.
 - Read the changed files as they are now when you need more context.
 
-Write the replay as JSON and save it with `senior replay save`, passing the JSON on stdin with a heredoc. It prints the replay id.
+Write the replay as JSON with the Write tool to `.senior/inbox/replay.json`, and save it with `senior replay save --file .senior/inbox/replay.json`. Do not use a heredoc or `echo`, because they fail in PowerShell on Windows. The CLI prints the replay id and removes the file.
 
 ```json
 {
@@ -48,6 +49,8 @@ Write the replay as JSON and save it with `senior replay save`, passing the JSON
 ```
 
 How to write the scenes:
+
+- Pitch each scene at the user's level. Run `senior level profile <path>` for the main file of each scene. At levels 0 to 2, the narration explains every new word it uses and what each changed line does, one sentence per line, and a scene covers less ground, so use more scenes. At levels 3 to 6, explain the idea of each change and the one line that does the real work. From level 7, as below.
 
 - Use three to eight scenes. Group steps by purpose; do not make one scene per edit. Keep the order in which things happened, unless another order is much easier to follow.
 - Give each scene a `kind`: `build` for code that was written, `bug` for something that failed with the guesses and the fix, `decision` for a choice between options, `skipped` for something left out on purpose, and `check` for how the result was verified.

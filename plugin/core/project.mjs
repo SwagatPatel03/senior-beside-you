@@ -21,7 +21,8 @@ export function hasSourceCode(root) {
 export function initProject(root) {
   for (const dir of FOLDERS) fs.mkdirSync(seniorPath(root, dir), { recursive: true });
   const gitignore = seniorPath(root, '.gitignore');
-  // Decisions, briefs, regrets, replays and the story belong in git. Raw session records and hook state do not.
-  if (!fs.existsSync(gitignore)) fs.writeFileSync(gitignore, 'sessions/\nstate/\n');
+  // Decisions, briefs, regrets, replays and the story belong in git. Raw session records, hook state
+  // and inbox files waiting for the CLI do not.
+  if (!fs.existsSync(gitignore)) fs.writeFileSync(gitignore, 'sessions/\nstate/\ninbox/\n');
   return seniorPath(root);
 }

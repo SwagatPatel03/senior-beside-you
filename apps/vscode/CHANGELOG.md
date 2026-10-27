@@ -2,8 +2,12 @@
 
 ## Unreleased
 
+- Knowledge levels. You rate each technology in the project from 0 to 10 on the new **Levels** page, and every piece is cut and taught at your level in its technology: a card for each new idea and every word explained at the lowest levels, a fading trace in the middle (a shape with blanks, then only the first line, then nothing but a list of what to write), and choices instead of typing at level 10. **Show me** (Alt+S) brings back the full trace, and **Done** (Ctrl+Alt+Enter) finishes a piece written from a description. Below level 7 you type every piece yourself, so the gears are hidden. The page also lists the words you have learned.
+- The panel is quieter. Senior's words no longer sit in coloured boxes; the user's own questions carry a quiet rule, checks a thin green or red one, and boxes are kept for things you act on. The current piece no longer repeats its reason in the footer.
+
 - Decisions in the code. Each ledger decision shows as a line above the code it is about, with **Why?** for a card with the whole decision and **Full record** for every detail in the Senior panel, including its history and the stored JSON. The status bar counts the decisions linked to the open file. The new setting `senior.decisionLenses` turns the lines off.
 - "About this line" has a **Full record** link for each decision it names.
+- A **Decisions and plans** page in the Senior panel shows every decision in the project, including the ones no code carries out yet, and each plan as a checklist of its steps. It opens by itself after a design session, and **Full record** now opens the decision there. When the open file has no linked decisions, the status bar counts the project's decisions and opens this page.
 
 - The plan for a piece you write is traced on its own lines in Senior's colour, so you see the whole piece before you start. It replaces the ghost text, so IntelliSense can no longer hide the plan or be mistaken for it.
 - A line above the piece says which piece it is and what it is for, with Why?, Fill in and Skip.

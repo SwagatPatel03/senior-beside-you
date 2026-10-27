@@ -103,6 +103,21 @@
         "category": "Senior"
       },
       {
+        "command": "senior.showMe",
+        "title": "Show me the code of this piece",
+        "category": "Senior"
+      },
+      {
+        "command": "senior.pieceDone",
+        "title": "I have written this piece",
+        "category": "Senior"
+      },
+      {
+        "command": "senior.showLevels",
+        "title": "Show my knowledge levels",
+        "category": "Senior"
+      },
+      {
         "command": "senior.acceptPiece",
         "title": "Accept this piece as planned",
         "category": "Senior"
@@ -120,6 +135,11 @@
       {
         "command": "senior.pickDecision",
         "title": "Show the decisions linked to this file",
+        "category": "Senior"
+      },
+      {
+        "command": "senior.showMemory",
+        "title": "Show every decision and plan",
         "category": "Senior"
       },
       {
@@ -173,7 +193,19 @@
       {
         "command": "senior.acceptPiece",
         "key": "tab",
-        "when": "editorTextFocus && senior.inSlot && senior.gear == 'accept' && !suggestWidgetVisible && !inlineSuggestionVisible && !inSnippetMode"
+        "when": "editorTextFocus && senior.inSlot && senior.gear == 'accept' && !senior.learning && !suggestWidgetVisible && !inlineSuggestionVisible && !inSnippetMode"
+      },
+      {
+        "command": "senior.showMe",
+        "key": "alt+s",
+        "mac": "ctrl+alt+s",
+        "when": "editorTextFocus && senior.inSlot && senior.faded"
+      },
+      {
+        "command": "senior.pieceDone",
+        "key": "ctrl+alt+enter",
+        "mac": "cmd+alt+enter",
+        "when": "editorTextFocus && senior.inSlot && senior.ownVersion"
       }
     ],
     "configuration": {

@@ -10,6 +10,7 @@ import { GuideController } from './guide/controller.ts';
 import { Decorations } from './guide/decorations.ts';
 import { PieceLens } from './guide/lens.ts';
 import { QuietOthers } from './guide/quiet.ts';
+import { LevelsController } from './levels/controller.ts';
 import type { DecisionView, FromPanel, Gear, JournalEntry } from './panel/protocol.ts';
 import { PanelProvider } from './panel/provider.ts';
 import { REPLAY_SCHEME, ReplayController } from './replay/controller.ts';
@@ -26,6 +27,8 @@ export interface SeniorApi {
   guide: GuideController;
   replays: ReplayController;
   voice: Voice;
+  levels: LevelsController;
+  handlers: BridgeHandlers;
   bridge: { port: number; token: string };
 }
 
@@ -54,10 +57,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
   // A window that closed in the middle of a piece may have left other ghost text turned off.
   void quiet.restore();
   const guide = new GuideController(session, decorations, quiet, root);
+  const levels = new LevelsController(session, root);
+  guide.techFor = levels.techFor;
+  context.subscriptions.push(levels, guide.onDidFinishPiece(levels.onPiece));
   const lens = new PieceLens(guide);
   const replays = new ReplayController(session, root, () => panel.reveal(), readAloud);
   const handlers = new BridgeHandlers(session, guide, replays, root, (dir) => {
-    if (dir) projectDir = dir;
+    if (!dir || dir === projectDir) return;
+    projectDir = dir;
+    refreshMemory();
+    levels.refresh(true);
   });
   const bridge = new BridgeServer(handlers.handle, context.extension.packageJSON.version as string, log);
   const panel = new PanelProvider(context.extensionUri, session, (message) => void onPanel(message), readAloud);
@@ -67,20 +76,43 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
     if (available && session.readAloud) void voice.warm();
   });
   const status = new StatusItem(session);
-  const decisions = new DecisionLenses();
+  const decisions = new DecisionLenses(root);
 
-  /** The full record of a decision, in the Senior panel. */
+  /** Read every decision and plan again, so the memory page never shows an old record. */
+  function refreshMemory(project = decisions.project()): void {
+    session.setMemory(project ? decisions.memory(project) : null);
+  }
+
+  /** The full record of a decision, unfolded on the memory page of the Senior panel. */
   function showDecision(id: string, project?: string): void {
-    const folder = root();
-    const dir = project ?? (folder ? findRoot(folder) : null);
-    const detail = dir ? decisions.detail(dir, id) : null;
-    if (!detail) {
+    const dir = project ?? decisions.project();
+    const found = dir ? decisions.has(dir, id) : null;
+    if (!dir || !found) {
       void vscode.window.showWarningMessage(`There is no decision ${id} in this project's ledger.`);
       return;
     }
-    session.add({ kind: 'decision', decision: detail });
+    refreshMemory(dir);
+    session.focusDecision(found);
     panel.reveal();
   }
+
+  /** Every decision and plan in the project, on the memory page of the Senior panel. */
+  function showMemory(project?: string): void {
+    refreshMemory(project);
+    session.setView('memory');
+    panel.reveal();
+  }
+
+  // When a design session records decisions or saves a plan, show them at once, unless the user is
+  // in the middle of a step or a replay, where a new page would take them away from their work.
+  context.subscriptions.push(
+    decisions.onDidChangeMemory(({ created }) => {
+      refreshMemory();
+      if (created && !session.step && !session.active && !session.replay) showMemory();
+    }),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => refreshMemory()),
+  );
+  refreshMemory();
 
   async function watchReplay(id?: string): Promise<void> {
     let chosen = id;
@@ -192,6 +224,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
         const r = root();
         const target = r ? path.resolve(r, message.file) : null;
         if (!r || !target || !isInside(r, target)) return;
+        // A design brief reads best rendered, the way it would on GitHub.
+        if (message.preview) {
+          await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(target));
+          break;
+        }
         const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(target));
         const at = new vscode.Position(Math.max(0, (message.line ?? 1) - 1), 0);
         await vscode.window.showTextDocument(doc, { selection: new vscode.Range(at, at) });
@@ -199,6 +236,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
       }
       case 'showDecision':
         showDecision(message.id);
+        break;
+      case 'setView':
+        if (message.view === 'memory') refreshMemory();
+        if (message.view === 'levels') levels.refresh(true);
+        session.setView(message.view);
+        break;
+      case 'setLevel':
+        if (Number.isInteger(message.level) && message.level >= 0 && message.level <= 10) levels.set(message.tech, message.level);
+        break;
+      case 'suggestion':
+        levels.answerSuggestion(message.id, message.answer);
+        break;
+      case 'choose':
+        handlers.choose(message.id, message.option);
+        break;
+      case 'idiom':
+        await handlers.chooseIdiom(message.id, message.choice);
         break;
       case 'setup':
         if (await installPlugin(log)) await refreshSetup();
@@ -219,7 +273,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
 
   async function pickDecision(ids?: string[], project?: string): Promise<void> {
     const chosen = await decisions.pick(ids, project);
-    if (chosen) showDecision(chosen.id, chosen.project);
+    if (!chosen) return;
+    if (chosen.id) showDecision(chosen.id, chosen.project);
+    else showMemory(chosen.project);
   }
 
   async function refreshSetup(): Promise<void> {
@@ -246,6 +302,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
     vscode.commands.registerCommand('senior.showDecision', (id?: string, project?: string) => (id ? showDecision(id, project) : pickDecision())),
     vscode.commands.registerCommand('senior.pickDecision', (ids?: string[], project?: string) => pickDecision(ids, project)),
     vscode.commands.registerCommand('senior.decisionWhy', (uri: vscode.Uri, line: number, character: number) => decisions.showWhy(uri, line, character)),
+    vscode.commands.registerCommand('senior.showMemory', () => showMemory()),
     vscode.window.registerWebviewViewProvider(PanelProvider.viewId, panel),
     vscode.workspace.registerTextDocumentContentProvider(REPLAY_SCHEME, replays),
     vscode.commands.registerCommand('senior.watchReplay', () => watchReplay()),
@@ -262,6 +319,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
     vscode.commands.registerCommand('senior.takeOver', () => guide.action('takeOver')),
     vscode.commands.registerCommand('senior.fillIn', () => guide.action('fillIn')),
     vscode.commands.registerCommand('senior.skipPiece', () => guide.action('skip')),
+    vscode.commands.registerCommand('senior.showMe', () => guide.action('reveal')),
+    vscode.commands.registerCommand('senior.pieceDone', () => guide.action('done')),
+    vscode.commands.registerCommand('senior.showLevels', () => {
+      levels.refresh(true);
+      session.setView('levels');
+      panel.reveal();
+    }),
     vscode.commands.registerCommand('senior.focus', () => vscode.commands.executeCommand('senior.panel.focus')),
     vscode.commands.registerCommand('senior.setupClaudeCode', async () => {
       if (await installPlugin(log)) await refreshSetup();
@@ -269,7 +333,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
   );
 
   // Keep "connected a minute ago" fresh in the panel.
-  const tick = setInterval(() => session.changed(), 15_000);
+  const tick = setInterval(() => {
+    // While the Levels page shows, follow levels changed from the terminal.
+    if (session.view === 'levels') levels.refresh(true);
+    else session.changed();
+  }, 15_000);
   context.subscriptions.push({ dispose: () => clearInterval(tick) });
 
   try {
@@ -279,7 +347,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Senior
   }
   void refreshSetup();
 
-  return { session, decisions, guide, replays, voice, bridge: bridge.address };
+  return { session, decisions, guide, replays, voice, levels, handlers, bridge: bridge.address };
 }
 
 export function deactivate(): void {

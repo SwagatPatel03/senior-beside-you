@@ -7,6 +7,7 @@ allowed-tools:
   - Read
   - Glob
   - Grep
+  - Write
 ---
 
 # Repo onboarding
@@ -29,6 +30,7 @@ The Senior CLI is: `node "${CLAUDE_PLUGIN_ROOT}/cli/senior.mjs"`. Below it is wr
 4. If a focus area was given, go deeper there, and find the closest existing feature to copy.
 5. Write `.senior/repo-map.md` with those sections. Keep it under about 150 lines and use real file paths.
 6. Tell the user in one or two sentences where the map is and which existing file you would copy for the next feature.
+6b. **Levels.** Run `senior stack detect`, which saves the project's technologies to `.senior/stack.json`, and then `senior level list`. If any technology is not rated, or this codebase is not rated, ask once, in plain text: show `senior level scale` as it is, and ask for a number from 0 to 10 for each unrated technology and for this codebase, saying that a short answer such as "Java 4, PostgreSQL 1, codebase 0" is enough. This codebase decides how much Senior explains about where things live and which existing pattern a piece copies, not the language itself. Record each answer with `senior level set <technology> <number>` (`codebase` for this codebase). If the user would rather not, carry on: unrated technologies work at level 7. When the user's codebase level is 0 to 3, the repo map and every explanation from here on say why a file lives where it does, not only where.
 
 ## The first day
 
@@ -44,7 +46,7 @@ Run `senior ledger list`. If the ledger already has decisions, stop after step 6
 
    Ask the user, in plain text, which of these were deliberate. Say that a short answer such as "1 and 2 yes, 3 no" is enough, and that they can correct you in their own words. This is not a quiz. You are asking about the user's intent, not testing what they know. Do not ask follow-up questions about their answers.
 
-8. **Record only what the user confirmed.** For each confirmed choice, run `senior ledger add` with the JSON on stdin from a heredoc, and include:
+8. **Record only what the user confirmed.** For each confirmed choice, write the JSON with the Write tool to its own file in `.senior/inbox/`, such as `.senior/inbox/d-1.json`, and run `senior ledger add --file .senior/inbox/d-1.json`. Do not use a heredoc or `echo`, because they fail in PowerShell on Windows. The CLI removes the file once the decision is saved. Include:
    - `"origin": "found-in-code"`,
    - `title`, `chosen`, `reversibility`, `guards` and `payoff`,
    - `why`, taken from the user's answer. If the user only said yes, use the reason you suggested and say in `why` that the user confirmed it,

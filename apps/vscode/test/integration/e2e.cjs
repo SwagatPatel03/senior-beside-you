@@ -26,6 +26,7 @@ function startClaude() {
     'mcp__plugin_senior_editor__status', 'mcp__plugin_senior_editor__begin_step', 'mcp__plugin_senior_editor__guide',
     'mcp__plugin_senior_editor__wait', 'mcp__plugin_senior_editor__say', 'mcp__plugin_senior_editor__show_check',
     'mcp__plugin_senior_editor__open_file', 'mcp__plugin_senior_editor__end_step',
+    'mcp__plugin_senior_editor__offer_choice', 'mcp__plugin_senior_editor__show_idiom',
   ];
   const child = spawn(process.env.CLAUDE_BIN, args, { cwd: workspace, env: { ...process.env, ELECTRON_RUN_AS_NODE: '' }, windowsHide: true });
   let out = '';
@@ -54,7 +55,9 @@ exports.run = async function run() {
 
   let asked = false;
   const typed = [];
-  const deadline = Date.now() + 14 * 60 * 1000;
+  // At level 0 every piece is one line with a check every few lines, so the session takes longer.
+  const minutes = process.env.SENIOR_E2E_LEVEL !== undefined ? 30 : 14;
+  const deadline = Date.now() + minutes * 60 * 1000;
 
   // Play the user until Claude Code finishes. A person takes a moment to read the reason first.
   while (!finished && Date.now() < deadline) {
@@ -81,7 +84,7 @@ exports.run = async function run() {
 
   if (!finished) {
     claude.child.kill();
-    throw new Error('Claude Code did not finish within fourteen minutes.');
+    throw new Error(`Claude Code did not finish within ${minutes} minutes.`);
   }
 
   const journal = api.session.snapshot().journal;
@@ -127,6 +130,32 @@ exports.run = async function run() {
   console.log(`  Narration the navigator prepared: ${narrations.join(' | ') || '(none found in the stream)'}`);
   assert.ok(narrations.includes(steps[1].step.why), 'step 2 opened with the narration the navigator prepared for it');
   assert.ok(activity.some((a) => a.helper && a.userTurn), 'the navigator worked while the user was typing');
+
+  // With a level set, every piece is cut and taught at it.
+  if (process.env.SENIOR_E2E_LEVEL !== undefined) {
+    const level = Number(process.env.SENIOR_E2E_LEVEL);
+    const lastViews = new Map();
+    for (const e of journal.filter((x) => x.kind === 'pieces')) lastViews.set(e.id, e.pieces);
+    const pieces = [...lastViews.values()].flat().filter((p) => p.kind === 'spine');
+    console.log(`  Spine pieces at JavaScript ${level}: ${pieces.length}`);
+    for (const p of pieces) {
+      const t = p.teach ?? {};
+      console.log(`    ${p.lines} line${p.lines === 1 ? '' : 's'} · level ${t.level} · ${t.trace ?? 'no trace mode'} · ${p.why}`);
+      if (t.concept) console.log(`      New idea: ${t.concept.title}. ${t.concept.text}${t.concept.bridge ? ` (${t.concept.bridge})` : ''}`);
+      for (const w of t.words ?? []) console.log(`      ${w.text}: ${w.meaning}`);
+      for (const l of t.lines ?? []) console.log(`      ${l.code}  ${l.text}`);
+    }
+    const known = fs.existsSync(process.env.SENIOR_LEVELS_FILE) ? JSON.parse(fs.readFileSync(process.env.SENIOR_LEVELS_FILE, 'utf8')).words : {};
+    console.log(`  Words recorded as explained: ${JSON.stringify(known)}`);
+    assert.ok(pieces.length > 0, 'spine pieces reached the user');
+    assert.ok(pieces.every((p) => p.teach && p.teach.level === level), 'every spine piece carries the user\'s level');
+    if (level === 0) {
+      assert.ok(pieces.every((p) => p.lines <= 2), 'at level 0 a spine piece is one line, or one line and its closing bracket');
+      assert.ok(pieces.some((p) => p.teach.words && p.teach.words.length), 'the words of a line are explained');
+      assert.ok(pieces.some((p) => p.teach.concept), 'a new idea gets a card');
+      assert.ok(Object.values(known).some((w) => w.length), 'explained words are remembered');
+    }
+  }
 
   for (const file of ['test/total.test.js', 'test/tax.test.js']) {
     const run = execFileSync(process.execPath, ['--test', file], { cwd: workspace, encoding: 'utf8', env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } });

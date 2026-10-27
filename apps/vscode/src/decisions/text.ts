@@ -92,7 +92,7 @@ function definitions(symbol: string, lines: string[], places: NamedPlace[] | nul
   return [];
 }
 
-function byId(a: Decision, b: Decision): number {
+export function byId(a: { id: string }, b: { id: string }): number {
   return (Number(a.id.replace(/\D/g, '')) || 0) - (Number(b.id.replace(/\D/g, '')) || 0);
 }
 

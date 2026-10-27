@@ -29,12 +29,21 @@ Put the cursor on any line and press Ctrl+Alt+/ (Cmd+Alt+/ on a Mac). If the lin
 You never need to open `.senior/ledger/` to know why the code is the way it is. Each recorded decision shows as one quiet line above the code it is about, such as "D-004: Stop double bookings with a unique rule in the database". The line also says whether the decision is hard or easy to undo, and it has two links, **Why?** and **Full record**.
 
 - **Why?** opens a card with what was chosen, why, what was turned down and why, what it protects against, and when you will see it matter. The same card opens when you hover over the linked name.
-- **Full record** opens every detail in the Senior panel. That includes examples, the checks done before a hard-to-undo decision, where the decision lives in the code, and its history: when it was made, each time the senior brought it back, and whether it was replaced. At the bottom, **Show the original record** shows the stored JSON exactly as it is, so nothing is ever hidden.
+- **Full record** opens the decision on the **Decisions and plans** page of the Senior panel, with every detail unfolded. That includes examples, the checks done before a hard-to-undo decision, where the decision lives in the code, and its history: when it was made, each time the senior brought it back, and whether it was replaced. At the bottom, **Show the original record** shows the stored JSON exactly as it is, so nothing is ever hidden.
 - When a decision replaces an older one, the line says so, and the card shows what changed.
 - When two or more decisions are about the same code, they share one line, "2 decisions are about reserveSlot.", with **Show them**.
-- The status bar counts the decisions linked to the open file. Click the count to choose one.
+- The status bar counts the decisions linked to the open file. Click the count to choose one. When the open file has none, it counts the whole project's decisions, and a click opens the **Decisions and plans** page.
 
 A decision shows above the first definition of each symbol linked to it. A decision linked only by a path shows at the top of the file. As with callbacks, nothing is guessed from words. The lines update by themselves when a decision is recorded, linked or replaced. The history of when a decision was brought back comes from `.senior/sessions/`, which is not committed, so each computer shows its own.
+
+### Every decision and plan, before there is code
+
+Right after a design session, the decisions are not linked to any code yet, because they are linked as the plan is built. So the Senior panel has a second page, **Decisions and plans**, next to **This session**. It shows everything in `.senior/` without making you read a file:
+
+- **The plan** is a checklist of its steps, with how many are done. The step in progress or the next one is unfolded and shows why it exists, what you will see when it works, the risk it guards against, its files and the command that checks it. Below the steps are the decisions the plan carries out, the examples that become the first tests, and a link to the design brief, which opens rendered.
+- **The decisions** are listed one per row with their id, title and how hard they are to undo, and a row says "Not in the code yet" until the decision is linked. Click a row to unfold the whole record, the same one **Full record** shows. Replaced decisions are kept at the bottom for the history.
+
+The page opens by itself when a design session records decisions or saves a plan, unless you are in the middle of a step or a replay. It updates when the files change. You can also open it with **Senior: Show every decision and plan**.
 
 ## Three gears
 
@@ -45,6 +54,18 @@ A decision shows above the first definition of each symbol linked to it. A decis
 | **Watch** | Senior types the piece at reading speed, and Escape hands it back to you. | The code is new to you and you want to see it built first. |
 
 You can change gear at any time from the panel, from the status bar, or with Ctrl+Alt+G. The change applies to the piece you are on.
+
+## Your level in each technology
+
+How much you type and how much Senior explains depends on how well you know each technology, from 0 (never written it) to 10 (you decide and Senior types). Rate them on the **Levels** page of the panel, or with `/senior:level` in Claude Code. Each piece shows its technology and your level, such as "Java 0".
+
+- At levels 0 to 2, the piece you are writing comes with a short card on any new idea, and every new word of the line explained. You type every line yourself, so the gears are hidden and Tab never accepts the piece for you.
+- At level 3, a pattern you have typed before is traced as a shape, with its names hidden behind hints such as "is it held?". At level 4, only the first line is traced and plain sentences under it say what each line should do. At levels 5 and 6, nothing is traced: the panel lists what to write and the names to use.
+- When the trace is faded or hidden, **Show me** (Alt+S) traces the whole piece. It stays yours to type. When you write a piece from a description, press **Done** (Ctrl+Alt+Enter) and Senior checks your version by running it.
+- At level 6, after you write a piece your way, Senior may show how it is usually written, side by side, and you keep yours or take the usual one.
+- At level 10, Senior asks you to choose between options in the panel and writes the code itself.
+
+The Levels page also lists the words you have learned. Senior explains each word once and remembers it in every project.
 
 ## When your line differs from the plan
 
@@ -101,7 +122,11 @@ If the feature has no plan yet, Claude Code starts with a short design session. 
 | Senior: Take over typing | Escape, while Senior is typing |
 | Senior: Fill in this piece for me | |
 | Senior: Skip this piece | |
+| Senior: Show me the code of this piece | Alt+S (Ctrl+Alt+S on a Mac), when the trace is faded or hidden |
+| Senior: I have written this piece | Ctrl+Alt+Enter (Cmd+Alt+Enter on a Mac), when you write a piece from a description |
+| Senior: Show my knowledge levels | |
 | Senior: Show the decisions linked to this file | |
+| Senior: Show every decision and plan | |
 | Senior: Watch a replay | Left and right arrows move between scenes |
 | Senior: Show the Senior panel | |
 | Senior: Set up Claude Code for Senior | |

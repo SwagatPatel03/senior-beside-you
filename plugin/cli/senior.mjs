@@ -3,8 +3,11 @@
 // It is the only writer of the ledger, plans and replays, so every entry is validated the same way.
 
 import fs from 'node:fs';
+import path from 'node:path';
 import { activeEntries, addEntry, formatEntry, formatLine, linkEntry, loadLedger, searchEntries, warningsFor } from '../core/ledger.mjs';
-import { findRoot, SENIOR_DIR } from '../core/paths.mjs';
+import { addWords, bridgesFor, DEFAULT_LEVEL, effectiveLevel, isLevel, knownWords, levelOf, loadLevels, PROFILES, profile, profileBrief, setLevel, techId } from '../core/levels.mjs';
+import { findRoot, inInbox, SENIOR_DIR, toRel } from '../core/paths.mjs';
+import { addTechnology, currentStack, refreshStack, setCodebaseLevel, stackLevels, techForPath, techName } from '../core/stack.mjs';
 import { listPlans, loadPlan, savePlan, saveBrief, setStepStatus } from '../core/plans.mjs';
 import { initProject } from '../core/project.mjs';
 import { formatTopicList, loadRegrets, showTopics } from '../core/regrets.mjs';
@@ -26,6 +29,7 @@ Decision ledger
                                 Decisions linked to a file or symbol, or matching words.
   ledger add [--file f.json] [--supersedes D-001]
                                 Record a decision. JSON comes from the file or from stdin.
+                                A file in .senior/inbox/ is removed once it is saved.
   ledger link <id> [paths...] [--symbol name ...]
                                 Record where a decision lives in the code.
 
@@ -51,6 +55,19 @@ Replays
 Project story
   sessions [--all]              Digest of sessions since the last story (--all: every session).
   story mark                    Record that the story is up to date.
+
+Knowledge levels (the user's own rating, 0 to 10, kept in ~/.senior/levels.json)
+  level list                    The user's level for each technology in this project.
+  level set <technology> <0-10> Set a level. "codebase" sets the level for this codebase.
+  level profile <technology|path> [--json]
+                                How to guide this technology, or the technology of this file.
+  level scale                   What every level from 0 to 10 means.
+  stack detect                  Find the project's technologies and save .senior/stack.json.
+  stack add <name> [--files glob ...]
+                                Add a technology Senior could not find by itself.
+  words add <technology> <word> ...
+                                Record words already explained to the user.
+  words list <technology>       Words already explained to the user.
 `;
 
 function fail(message) {
@@ -90,14 +107,29 @@ function readStdin() {
   }
 }
 
-function readJsonInput(args, what) {
+let inputFile = null;
+
+/** The JSON input from --file or stdin. A relative --file path is tried from here, then from the project root. */
+function readJsonInput(args, what, r) {
   const file = takeOption(args, '--file')[0];
-  const raw = file ? fs.readFileSync(file, 'utf8') : readStdin();
+  let raw;
+  if (file) {
+    inputFile = [path.resolve(file), path.resolve(r, file)].find((p) => fs.existsSync(p));
+    if (!inputFile) fail(`The file ${file} does not exist. Write the ${what} to it first.`);
+    raw = fs.readFileSync(inputFile, 'utf8');
+  } else {
+    raw = readStdin();
+  }
   try {
-    return JSON.parse(raw);
+    return JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
   } catch (err) {
     return fail(`The ${what} must be JSON. ${err.message}`);
   }
+}
+
+/** An inbox file holds one input, so it is removed once that input is saved. Other files are left alone. */
+function clearInbox(r) {
+  if (inputFile && inInbox(toRel(r, inputFile))) fs.rmSync(inputFile, { force: true });
 }
 
 function attempt(action) {
@@ -134,8 +166,9 @@ switch (command) {
       console.log(found.length ? found.map(formatEntry).join('\n\n') : `No decision is linked to or mentions "${args.join(' ')}".`);
     } else if (sub === 'add') {
       const supersedes = takeOption(args, '--supersedes')[0];
-      const input = readJsonInput(args, 'decision');
+      const input = readJsonInput(args, 'decision', r);
       const entry = attempt(() => addEntry(r, input, { supersedes }));
+      clearInbox(r);
       console.log(`Recorded ${entry.id}: ${entry.title}${supersedes ? ` (replaces ${supersedes})` : ''}`);
       for (const w of warningsFor(entry)) console.log(`Warning: ${w}`);
     } else if (sub === 'link') {
@@ -161,9 +194,10 @@ switch (command) {
       console.log(`${plan.title}\nGoal: ${plan.goal}\n`);
       for (const s of plan.steps) console.log(`${s.id} [${s.status}] ${s.title}\n   Why: ${s.why}\n   Expected: ${s.expect}${s.check ? `\n   Check: ${s.check}` : ''}`);
     } else if (sub === 'save') {
-      const input = readJsonInput(args, 'plan');
+      const input = readJsonInput(args, 'plan', r);
       const plan = attempt(() => savePlan(r, input));
       saveBrief(r, plan, input.design || {});
+      clearInbox(r);
       console.log(`Saved the plan for "${plan.feature}" with ${plan.steps.length} steps, and its brief.`);
     } else if (sub === 'step') {
       const [feature, stepId, status, ...summary] = args;
@@ -199,8 +233,9 @@ switch (command) {
     if (sub === 'material') {
       console.log(buildMaterial(r, args[0]));
     } else if (sub === 'save') {
-      const input = readJsonInput(args, 'replay');
+      const input = readJsonInput(args, 'replay', r);
       const replay = attempt(() => saveReplay(r, { source: 'claude-code', ...input }));
+      clearInbox(r);
       const latest = readSessions(r).sort((a, b) => b.endedAt.localeCompare(a.endedAt))[0];
       if (latest) appendEvent(r, latest.id, { type: 'replay', id: replay.id, title: replay.title });
       console.log(`Saved replay ${replay.id} with ${replay.scenes.length} scenes. It is in .senior/replays/${replay.id}.md`);
@@ -229,6 +264,93 @@ switch (command) {
     markStory(root());
     console.log('The story is marked as up to date.');
     break;
+
+  case 'level': {
+    const r = root({ required: false });
+    if (sub === 'list') {
+      if (!r) fail(`No ${SENIOR_DIR}/ folder was found, so there is no project stack. Run "init" first, or "level set" to rate a technology anyway.`);
+      const stack = currentStack(r);
+      if (!stack.technologies.length) {
+        console.log('Senior found no technologies in this project yet. The design session chooses them for a new project.');
+        break;
+      }
+      for (const t of stackLevels(stack)) {
+        const p = t.level === null ? null : profile(t.level);
+        console.log(`${t.name} (${t.id}): ${p ? `${t.level} · ${p.name}` : `not rated, so Senior works at level ${DEFAULT_LEVEL}`}${t.found.length ? ` · found in ${t.found.join(', ')}` : ''}`);
+      }
+      const codebase = stack.codebase?.level;
+      console.log(`This codebase: ${codebase === null || codebase === undefined ? 'not rated' : `${codebase} · ${profile(codebase).name}`}`);
+    } else if (sub === 'set') {
+      const [tech, raw] = args;
+      const level = Number(raw);
+      if (!tech || !isLevel(level)) fail('Usage: level set <technology> <0-10>');
+      if (techId(tech) === 'codebase') {
+        if (!r) fail(`No ${SENIOR_DIR}/ folder was found. The codebase level belongs to a project.`);
+        setCodebaseLevel(r, level);
+        console.log(`This codebase is now ${level} · ${profile(level).name}.`);
+        break;
+      }
+      const previous = attempt(() => setLevel(tech, level, { name: techName(tech) }));
+      const p = profile(level);
+      console.log(`${techName(tech)} is now ${level} · ${p.name}.${previous !== null && previous !== level ? ` It was ${previous}.` : ''} ${p.change}`);
+    } else if (sub === 'profile') {
+      const json = takeFlag(args, '--json');
+      const what = args.join(' ').trim();
+      if (!what) fail('Usage: level profile <technology|path> [--json]');
+      const data = loadLevels();
+      // A path is looked up in the project's stack; without .senior/ yet, in the files of this folder.
+      const base = r ?? process.cwd();
+      const fromPath = /[\\/.]/.test(what) ? techForPath(currentStack(base), toRel(base, what) ?? what, data) : null;
+      const id = techId(what);
+      const tech = fromPath ?? { id, name: techName(id), level: effectiveLevel(id, data), rated: levelOf(id, data) !== null };
+      if (json) console.log(JSON.stringify({ ...tech, profile: profile(tech.level), knownWords: knownWords(tech.id, data), bridges: bridgesFor(tech.id, tech.level, data) }, null, 2));
+      else console.log(profileBrief(tech, data));
+    } else if (sub === 'scale') {
+      for (const p of PROFILES) console.log(`${p.level} · ${p.name}. ${p.anchor} ${p.change}`);
+    } else {
+      fail(HELP);
+    }
+    break;
+  }
+
+  case 'stack': {
+    const r = root();
+    if (sub === 'detect') {
+      const { stack, added } = refreshStack(r);
+      if (!stack.technologies.length) console.log('Senior found no technologies yet. Saved an empty stack to .senior/stack.json.');
+      else {
+        console.log(`Saved .senior/stack.json with ${stack.technologies.length} technologies:`);
+        for (const t of stackLevels(stack)) console.log(`- ${t.name} (${t.id})${t.found.length ? `, found in ${t.found.join(', ')}` : ''}${t.level === null ? ', not rated yet' : `, level ${t.level}`}${added.includes(t.id) ? ' (new)' : ''}`);
+      }
+    } else if (sub === 'add') {
+      const files = takeOption(args, '--files');
+      const name = args.join(' ').trim();
+      const entry = attempt(() => addTechnology(r, name, files));
+      console.log(`Added ${entry.name} (${entry.id}) to the stack.${files.length ? ` Its files: ${files.join(', ')}.` : ''}`);
+    } else {
+      fail(HELP);
+    }
+    break;
+  }
+
+  case 'words': {
+    const [tech, ...words] = [sub, ...args];
+    if (!tech) fail('Usage: words add <technology> <word> ... | words list <technology>');
+    if (tech === 'add') {
+      const [id, ...list] = words;
+      if (!id || !list.length) fail('Usage: words add <technology> <word> ...');
+      const added = attempt(() => addWords(id, list));
+      console.log(added.length ? `Recorded ${added.length} new ${added.length === 1 ? 'word' : 'words'} for ${techName(id)}: ${added.join(', ')}.` : `Those words were already recorded for ${techName(id)}.`);
+    } else if (tech === 'list') {
+      const id = words[0];
+      if (!id) fail('Usage: words list <technology>');
+      const known = knownWords(id);
+      console.log(known.length ? `${techName(id)}: ${known.join(', ')}` : `No words have been explained in ${techName(id)} yet.`);
+    } else {
+      fail(HELP);
+    }
+    break;
+  }
 
   default:
     console.log(HELP);

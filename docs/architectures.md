@@ -108,6 +108,19 @@ Delivers F6 fully, F8 strongly, F7 and F3 after the fact. Risks: replays go unwa
 | Project story | Per module: what it does, decisions, bugs and how they were found, trade-offs | H12 |
 | Pushback rule | One line on the consequence and a better option, then do what you choose | H10 |
 
+### Knowledge levels (added Oct 27, 2026)
+
+The first real trial, a seat reservation service in Java by someone who had never written Java, showed that one way of pairing does not fit everyone: the trace, the pieces and the reasons all assumed the user could read the language, so nothing was learned. The goal is that the user understands the code at the end, so every choice about a piece is judged by that.
+
+The user rates each technology in the project from 0 to 10. The rating is a fact only the user knows, so Senior asks for it and never tests for it. One profile table in the core says what each level changes, and every host reads it:
+
+- **0 to 2, learning the language.** Pieces of one to three lines, the user types almost everything, a short card for each new idea, every new word explained once and remembered across projects, comparisons with a language the user knows better, and a check every few lines.
+- **3 to 6, learning to write it alone.** The trace fades: a shape with names left blank behind hints, then only the first line with plain sentences for the rest, then no trace and a list of what to write. At 6 the user's version is compared with the usual one.
+- **7 to 9, working.** Senior as described in C, from typing the spine to watching Senior type.
+- **10, deciding.** The user chooses between options and Senior writes every line; the regret library and pushback still apply.
+
+Each piece takes the level of its own technology (found from the project's files), so one step can teach Java at 0 and SQL at 1. A level changes how a step is cut and taught, never the plan or the ledger. Senior may suggest moving a level at most once a session, from editor events only, and only the user changes the number.
+
 The regret library is the most original part and the least proven. The first prototype should test it on a known failure, such as double bookings, with and without the library.
 
 ## No big mistakes: the safety layer

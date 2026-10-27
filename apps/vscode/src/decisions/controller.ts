@@ -1,13 +1,16 @@
 // Decisions in the code. Each ledger decision shows as a quiet line above the code it is about; the
 // hover card holds the whole decision; the full record opens in the Senior panel; the status bar
-// counts the decisions linked to the open file. Where they go and what they say lives in text.ts.
+// counts the decisions linked to the open file, or the whole project's when none is. Where they go
+// and what they say lives in text.ts, and the panel's page of every decision and plan in memory.ts.
 
+import fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { findRoot, loadLedger, readSessions } from '../../../../plugin/core/index.mjs';
-import type { Decision } from '../../../../plugin/core/index.mjs';
-import type { DecisionDetail } from '../panel/protocol.ts';
-import { clip, decisionDetail, GROUP_FROM, groupTitle, hoverMarkdown, placeDecisions, shortName, undoLabel, type NamedPlace, type Placement } from './text.ts';
+import { briefPath, findRoot, listPlans, loadLedger, loadPlan, readSessions } from '../../../../plugin/core/index.mjs';
+import type { Decision, Plan } from '../../../../plugin/core/index.mjs';
+import type { MemoryView } from '../panel/protocol.ts';
+import { memoryView } from './memory.ts';
+import { clip, GROUP_FROM, groupTitle, hoverMarkdown, placeDecisions, shortName, undoLabel, type NamedPlace, type Placement } from './text.ts';
 
 interface Placed {
   version: number;
@@ -29,19 +32,33 @@ export class DecisionLenses implements vscode.CodeLensProvider, vscode.HoverProv
   private forced: { uri: string; line: number; until: number } | null = null;
   private readonly status = vscode.window.createStatusBarItem('senior.decisions', vscode.StatusBarAlignment.Right, 99);
   private readonly subscriptions: vscode.Disposable[] = [];
+  /** Fires when a decision or a plan is recorded, linked, replaced or moved on. `created` is true for a new file. */
+  private readonly memoryEmitter = new vscode.EventEmitter<{ created: boolean }>();
+  readonly onDidChangeMemory = this.memoryEmitter.event;
+  private memoryTimer: ReturnType<typeof setTimeout> | null = null;
+  private memoryCreated = false;
 
-  constructor() {
+  /** `root` is the workspace folder Senior follows, for when no open file says which project it is. */
+  constructor(private readonly root: () => string | null) {
     this.status.name = 'Senior decisions';
-    this.status.command = 'senior.pickDecision';
-    const watcher = vscode.workspace.createFileSystemWatcher('**/.senior/ledger/*.json');
-    const reload = () => this.reload();
+    const ledgerWatcher = vscode.workspace.createFileSystemWatcher('**/.senior/ledger/*.json');
+    const planWatcher = vscode.workspace.createFileSystemWatcher('**/.senior/features/*.plan.json');
+    const reload = (created: boolean) => () => {
+      this.reload();
+      this.memoryChanged(created);
+    };
+    const planChanged = (created: boolean) => () => this.memoryChanged(created);
     this.subscriptions.push(
-      watcher,
-      watcher.onDidCreate(reload),
-      watcher.onDidChange(reload),
-      watcher.onDidDelete(reload),
+      ledgerWatcher,
+      ledgerWatcher.onDidCreate(reload(true)),
+      ledgerWatcher.onDidChange(reload(false)),
+      ledgerWatcher.onDidDelete(reload(false)),
+      planWatcher,
+      planWatcher.onDidCreate(planChanged(true)),
+      planWatcher.onDidChange(planChanged(false)),
+      planWatcher.onDidDelete(planChanged(false)),
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration('senior.decisionLenses')) reload();
+        if (e.affectsConfiguration('senior.decisionLenses')) this.reload();
       }),
       vscode.window.onDidChangeActiveTextEditor(() => void this.updateStatus()),
       vscode.workspace.onDidSaveTextDocument((doc) => {
@@ -58,6 +75,71 @@ export class DecisionLenses implements vscode.CodeLensProvider, vscode.HoverProv
     this.placed.clear();
     this.changeEmitter.fire();
     void this.updateStatus();
+  }
+
+  /** A design session writes several files in a row, so their changes are reported once, together. */
+  private memoryChanged(created: boolean): void {
+    this.memoryCreated ||= created;
+    if (this.memoryTimer) clearTimeout(this.memoryTimer);
+    this.memoryTimer = setTimeout(() => {
+      this.memoryTimer = null;
+      const wasCreated = this.memoryCreated;
+      this.memoryCreated = false;
+      this.memoryEmitter.fire({ created: wasCreated });
+    }, 300);
+  }
+
+  /** The project Senior follows: the open file's, or else the workspace folder's. */
+  project(): string | null {
+    const doc = vscode.window.activeTextEditor?.document;
+    const fromDoc = doc?.uri.scheme === 'file' ? findRoot(path.dirname(doc.uri.fsPath)) : null;
+    if (fromDoc) return fromDoc;
+    const folder = this.root();
+    return folder ? findRoot(folder) : null;
+  }
+
+  /** Every decision and plan in the project, read fresh from `.senior/`. */
+  memory(project: string): MemoryView | null {
+    let ledger: Decision[];
+    try {
+      ledger = loadLedger(project);
+    } catch {
+      return null;
+    }
+    const plans: Plan[] = [];
+    try {
+      for (const p of listPlans(project)) {
+        const plan = loadPlan(project, p.feature);
+        if (plan) plans.push(plan);
+      }
+    } catch {
+      // A plan that cannot be read leaves the decisions worth showing.
+    }
+    let sessions: ReturnType<typeof readSessions> = [];
+    try {
+      sessions = readSessions(project);
+    } catch {
+      // Session records only add history. A decision is still worth showing without them.
+    }
+    const rel = (file: string) => path.relative(project, file).replace(/\\/g, '/');
+    return memoryView({
+      ledger,
+      plans,
+      sessions,
+      recordFile: (e) => {
+        const stored = (e as Decision & { _file?: string })._file;
+        return stored ? rel(stored) : `.senior/ledger/${e.id}.json`;
+      },
+      brief: (feature) => {
+        const file = briefPath(project, feature);
+        return fs.existsSync(file) ? rel(file) : null;
+      },
+    });
+  }
+
+  /** Whether the project's ledger has a decision with this id. */
+  has(project: string, id: string): string | null {
+    return this.ledger(project).find((e) => e.id.toLowerCase() === id.toLowerCase())?.id ?? null;
   }
 
   private get enabled(): boolean {
@@ -163,22 +245,22 @@ export class DecisionLenses implements vscode.CodeLensProvider, vscode.HoverProv
     await vscode.commands.executeCommand('editor.action.showHover');
   }
 
-  /** The decisions placed in the open file, or the ones named, to choose from. */
-  async pick(ids?: string[], project?: string): Promise<{ id: string; project: string } | null> {
+  /**
+   * The decisions placed in the open file, or the ones named, to choose from. When the file has
+   * none, the answer has no id, and the panel shows every decision in the project instead.
+   */
+  async pick(ids?: string[], project?: string): Promise<{ id?: string; project: string } | null> {
     const doc = vscode.window.activeTextEditor?.document;
     const placed = doc ? await this.placementsFor(doc) : null;
-    const dir = project ?? placed?.project ?? null;
+    const dir = project ?? placed?.project ?? this.project();
     if (!dir) {
-      void vscode.window.showInformationMessage('This file is not in a project that uses Senior.');
+      void vscode.window.showInformationMessage('This folder is not a project that uses Senior yet. Run /senior:onboard in Claude Code to start.');
       return null;
     }
     const ledger = this.ledger(dir);
     const wanted = ids ?? [...new Set((placed?.placements ?? []).flatMap((p) => p.decisions.map((d) => d.id)))];
     const items = wanted.map((id) => ledger.find((e) => e.id === id)).filter((e): e is Decision => !!e);
-    if (!items.length) {
-      void vscode.window.showInformationMessage('No decisions are linked to this file.');
-      return null;
-    }
+    if (!items.length) return { project: dir };
     const chosen = await vscode.window.showQuickPick(
       items.map((e) => ({ label: `${e.id}: ${e.title}`, description: undoLabel(e), detail: e.chosen, id: e.id })),
       { title: 'Decisions linked to this code', placeHolder: 'Choose one to read in full' },
@@ -186,43 +268,39 @@ export class DecisionLenses implements vscode.CodeLensProvider, vscode.HoverProv
     return chosen ? { id: chosen.id, project: dir } : null;
   }
 
-  /** The full record of one decision. The ledger is read fresh, so the record is never out of date. */
-  detail(project: string, id: string): DecisionDetail | null {
-    let ledger: Decision[];
-    try {
-      ledger = loadLedger(project);
-    } catch {
-      return null;
-    }
-    const e = ledger.find((d) => d.id.toLowerCase() === id.toLowerCase());
-    if (!e) return null;
-    let sessions: ReturnType<typeof readSessions> = [];
-    try {
-      sessions = readSessions(project);
-    } catch {
-      // Session records only add history. A decision is still worth showing without them.
-    }
-    const stored = (e as Decision & { _file?: string })._file;
-    const file = stored ? path.relative(project, stored).replace(/\\/g, '/') : `.senior/ledger/${e.id}.json`;
-    return decisionDetail(e, ledger, sessions, file);
-  }
-
+  /**
+   * With decisions linked to the open file, the status bar counts those. Otherwise it counts the
+   * project's, so decisions that no code carries out yet are still one click away.
+   */
   private async updateStatus(): Promise<void> {
     const doc = vscode.window.activeTextEditor?.document;
     const placed = doc ? await this.placementsFor(doc) : null;
     const count = placed ? new Set(placed.placements.flatMap((p) => p.decisions.map((d) => d.id))).size : 0;
-    if (!count) {
+    if (count) {
+      this.status.text = `$(layers) ${count} decision${count === 1 ? '' : 's'}`;
+      this.status.tooltip = `${count === 1 ? 'One decision is' : `${count} decisions are`} linked to this file. Click to choose one and read it in full.`;
+      this.status.command = 'senior.pickDecision';
+      this.status.show();
+      return;
+    }
+    const project = this.enabled ? this.project() : null;
+    const active = project ? this.ledger(project).filter((e) => e.status !== 'superseded').length : 0;
+    if (!active) {
       this.status.hide();
       return;
     }
-    this.status.text = `$(layers) ${count} decision${count === 1 ? '' : 's'}`;
-    this.status.tooltip = `${count === 1 ? 'One decision is' : `${count} decisions are`} linked to this file. Click to choose one and read it in full.`;
+    const total = `${active} decision${active === 1 ? '' : 's'}`;
+    this.status.text = `$(layers) ${total}`;
+    this.status.tooltip = `This project has ${total}. Click to see every decision and plan in the Senior panel.`;
+    this.status.command = 'senior.showMemory';
     this.status.show();
   }
 
   dispose(): void {
     for (const s of this.subscriptions) s.dispose();
+    if (this.memoryTimer) clearTimeout(this.memoryTimer);
     this.changeEmitter.dispose();
+    this.memoryEmitter.dispose();
     this.status.dispose();
   }
 }

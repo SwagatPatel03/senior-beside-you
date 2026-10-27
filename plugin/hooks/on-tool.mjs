@@ -3,6 +3,7 @@
 
 import { callbackMessage, computeCallbacks, describeTouch } from '../core/callbacks.mjs';
 import { activeEntries } from '../core/ledger.mjs';
+import { inInbox } from '../core/paths.mjs';
 import { appendEvent, loadState, saveState } from '../core/sessions.mjs';
 import { addContext, recordEvent, runHook } from './io.mjs';
 
@@ -29,8 +30,9 @@ await runHook(async (input, root) => {
   const touch = describeTouch(root, input);
   const toolUseId = input.tool_use_id || undefined;
 
-  // Edits to files outside the project, such as scratch files, are not part of its story.
-  if ((touch.kind === 'edit' || touch.kind === 'edit-failed') && !touch.files[0]) return;
+  // Edits to files outside the project, such as scratch files, are not part of its story. Nor are
+  // the JSON files a skill writes to the inbox for the CLI.
+  if ((touch.kind === 'edit' || touch.kind === 'edit-failed') && (!touch.files[0] || inInbox(touch.files[0]))) return;
   if (touch.kind === 'edit') {
     recordEvent(root, input, { type: 'edit', tool: touch.tool, file: touch.files[0], toolUseId, ...editChange(input) });
   } else if (touch.kind === 'edit-failed') {

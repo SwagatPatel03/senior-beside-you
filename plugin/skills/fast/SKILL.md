@@ -7,6 +7,7 @@ allowed-tools:
   - Read
   - Glob
   - Grep
+  - Write
 ---
 
 # The fast lane
@@ -27,8 +28,9 @@ Spend less than a minute on this, and say nothing if there is nothing worth sayi
 4. Push back only when the task, done the way it was asked, breaks a recorded decision or walks into a known failure. Then write two sentences: the consequence in concrete terms, and a better option that costs about the same time. Ask which way to go, and do what the user chooses without arguing again.
 
    For example: "Retrying the payment call five times can charge a customer twice, because the provider may have taken the money even when we saw a timeout. An idempotency key on the request makes the retries safe and takes about the same time. Shall I add it, or retry as asked?"
+5. Run `senior level profile <path>` for the main file the task touches. If the user's level there is 3 or lower, add one sentence after any pushback: the fast lane will write code in a technology they are still learning, and `/senior:replay` afterwards explains it at their level, line by line where they need it. Do not slow down for it.
 
-5. If the user chooses a way that goes against a recorded decision, record the change as an announced decision with `senior ledger add --supersedes <id>`, passing the JSON on stdin with a heredoc. Say that it was chosen under a deadline, and what to revisit and when. Later callbacks will bring it back at the right moment.
+5. If the user chooses a way that goes against a recorded decision, record the change as an announced decision with `senior ledger add --supersedes <id> --file .senior/inbox/decision.json`. Write the JSON to that file with the Write tool first. Do not use a heredoc or `echo`, because they fail in PowerShell on Windows. The CLI removes the file once the decision is saved. Say that it was chosen under a deadline, and what to revisit and when. Later callbacks will bring it back at the right moment.
 
 ## 2. Work at full speed
 

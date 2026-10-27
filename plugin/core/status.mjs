@@ -7,6 +7,7 @@ import { activeEntries, formatLine } from './ledger.mjs';
 import { seniorPath } from './paths.mjs';
 import { hasSourceCode } from './project.mjs';
 import { unstoriedSessions } from './sessions.mjs';
+import { levelsText } from './stack.mjs';
 
 const MAX_LISTED = 15;
 
@@ -30,6 +31,15 @@ export function statusText(root, { cli, currentSession } = {}) {
     lines.push('Decision ledger: empty. This project already has code, so /senior:onboard is the place to start. It maps the code and asks the user which of the choices already in it were deliberate.');
   } else {
     lines.push('Decision ledger: empty. The project has no code yet, so the design session (/senior:design, which /senior:onboard also starts) writes the first decisions.');
+  }
+
+  if (code) {
+    try {
+      const levels = levelsText(root);
+      if (levels) lines.push(levels);
+    } catch {
+      // Levels are a help, never a reason for the session start to fail.
+    }
   }
 
   const briefs = features(root);

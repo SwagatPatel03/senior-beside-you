@@ -1,11 +1,14 @@
 // Serves the Senior panel outside VS Code, with VS Code's theme colours and a sample session, for
 // working on the design. Run `npm run build`, then `npm run preview`, and open the printed address.
-// Add ?theme=light for the light theme, and ?state=welcome, watch, diverged or decision for the other states.
+// Add ?theme=light for the light theme, and ?state=welcome, watch, diverged or memory for the other states.
+// The memory page shows a sample project, or a real one when SENIOR_PREVIEW_PROJECT names its folder.
 
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { briefPath, listPlans, loadLedger, loadPlan, PROFILES, readSessions } from '../../../plugin/core/index.mjs';
+import { memoryView } from '../src/decisions/memory.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.join(here, '..', 'dist');
@@ -74,6 +77,9 @@ const WEBVIEW_DEFAULTS = `
 const at = (min) => new Date(Date.now() - min * 60000).toISOString();
 
 const SAMPLE = {
+  view: 'session',
+  focus: null,
+  memory: null,
   gear: 'type',
   workspace: '/projects/gym',
   readAloud: false,
@@ -124,16 +130,33 @@ const STATES = {
     connection: { lastCallSecondsAgo: null, claudeFound: true, pluginInstalled: false },
   },
   watch: { ...SAMPLE, gear: 'watch', active: { ...SAMPLE.active, watching: true } },
-  decision: {
+  memory: {
     ...SAMPLE,
+    view: 'memory',
     active: null,
-    journal: [
-      SAMPLE.journal.at(-1),
-      {
-        id: 'e11',
-        at: at(0),
-        kind: 'decision',
-        decision: {
+    step: null,
+    memory: {
+      plans: [
+        {
+          feature: 'class-booking',
+          title: 'Book a place in a class',
+          goal: 'Members book a place in a class, and two members can never hold the same place.',
+          done: 1,
+          total: 4,
+          decisions: [{ id: 'D-001', title: 'Bookings are atomic' }],
+          examples: ['Two members press Book for the last place at the same second: one gets it, and the other is told it was just taken.'],
+          steps: [
+            { id: 'S1', title: 'Set up the project with a passing test', why: 'Every later step needs a place to prove itself.', expect: 'One test passes.', risk: '', files: ['pyproject.toml'], check: 'pytest', status: 'done', summary: 'The smoke test passes.' },
+            { id: 'S2', title: 'Turn the examples into failing tests', why: 'They define done.', expect: 'Three tests fail.', risk: '', files: ['tests/test_bookings.py'], check: 'pytest', status: 'pending' },
+            { id: 'S3', title: 'Make a booking atomic', why: 'The database must refuse a second booking for one place.', expect: 'The race test passes.', risk: 'A check then insert lets two members take the last place.', files: ['src/bookings/service.py'], check: 'pytest -k race', status: 'pending' },
+            { id: 'S4', title: 'Tell the loser kindly', why: 'A refused booking is normal, not an error.', expect: 'The message test passes.', risk: '', files: [], check: '', status: 'pending' },
+          ],
+          brief: '.senior/features/class-booking.md',
+          updatedAt: at(1),
+        },
+      ],
+      decisions: [
+        {
           id: 'D-001',
           title: 'Bookings are atomic',
           undo: 'Hard to undo',
@@ -163,8 +186,26 @@ const STATES = {
           ],
           record: { file: '.senior/ledger/D-001-bookings-are-atomic.json', json: '{\n  "id": "D-001",\n  "title": "Bookings are atomic",\n  "status": "active",\n  "reversibility": "one-way"\n}' },
         },
-      },
-    ],
+        {
+          id: 'D-002',
+          title: 'Times are stored in UTC and shown in the gym\'s time zone',
+          undo: 'Hard to undo',
+          chosen: 'Every time is stored in UTC, and the gym\'s time zone is applied only when a time is shown.',
+          why: 'A class at 7 am must stay at 7 am when the clocks change.',
+          rejected: [],
+          guards: 'Classes that move by an hour twice a year.',
+          payoff: 'The first weekend the clocks change.',
+          examples: [],
+          files: [],
+          symbols: [],
+          regrets: ['R-time-01'],
+          checks: [],
+          history: ['Decided on 12 October 2026, for the feature "class-booking".', 'No session recorded on this computer has brought it back yet.'],
+          record: { file: '.senior/ledger/D-002-times-are-stored-in-utc.json', json: '{\n  "id": "D-002"\n}' },
+        },
+      ],
+    },
+    focus: null,
   },
   replay: {
     ...SAMPLE,
@@ -198,7 +239,132 @@ const STATES = {
   },
 };
 
-function page(theme, state) {
+// Knowledge levels, on the seat reservation project the levels were designed on.
+const SCALE = PROFILES.map(({ level, name, anchor, change }) => ({ level, name, anchor, change }));
+const LEVELS = {
+  technologies: [
+    { id: 'java', name: 'Java', found: ['src/main/java/com/example/seats/SeatService.java'], level: 0 },
+    { id: 'spring-boot', name: 'Spring Boot', found: ['pom.xml'], level: 0 },
+    { id: 'maven', name: 'Maven', found: ['pom.xml'], level: null },
+    { id: 'postgresql', name: 'PostgreSQL', found: ['docker-compose.yml'], level: 1 },
+    { id: 'docker', name: 'Docker', found: ['docker-compose.yml'], level: 1 },
+  ],
+  codebase: null,
+  hasCode: true,
+  elsewhere: [{ id: 'python', name: 'Python', level: 4 }],
+  words: [{ id: 'java', name: 'Java', words: ['package', 'class', 'public', 'private', 'final', 'new', 'return', 'this'] }],
+  scale: SCALE,
+};
+for (const state of Object.values(STATES)) state.levels ??= LEVELS;
+
+const SEAT_STEP = { index: 3, total: 7, title: 'Hold a seat while the customer pays', why: 'A held seat is kept for ten minutes, so two customers never pay for the same seat.', expect: 'The hold test passes.', feature: 'seat-holds' };
+const java = (level, extra) => ({ tech: 'java', techName: 'Java', level, ...extra });
+const seatPieces = (level, active, done = []) => [
+  ...done,
+  { index: done.length, kind: 'spine', file: 'src/main/java/com/example/seats/SeatService.java', lines: 2, status: 'active', ...active, teach: java(level, active.teach) },
+  { index: done.length + 1, kind: 'spine', file: 'src/main/java/com/example/seats/SeatService.java', why: 'Stop here and report that the seat is taken.', lines: 1, status: 'waiting', teach: java(level) },
+];
+const lessonState = (level, active, extra = {}) => ({
+  ...SAMPLE,
+  activity: { state: 'working', label: 'Preparing the next part', helper: true, since: Date.now() - 4000 },
+  step: SEAT_STEP,
+  stats: { typed: 21, accepted: 0, watched: 0, filled: 0, steps: 2, takeaways: 2 },
+  active: { index: 1, total: 2, kind: 'spine', file: 'src/main/java/com/example/seats/SeatService.java', why: active.why, watching: false, teach: java(level, active.teach), ...extra },
+  journal: [
+    { id: 'l1', at: at(2), kind: 'step', step: SEAT_STEP },
+    { id: 'l2', at: at(2), kind: 'narration', text: 'This part stops the hold when someone else already has the seat.' },
+    { id: 'l3', at: at(1), kind: 'pieces', pieces: seatPieces(level, { ...active, ...extra }, [{ index: 0, kind: 'spine', file: 'src/main/java/com/example/seats/SeatService.java', why: 'Read the clock once and keep the time.', lines: 1, status: 'typed', teach: java(level, { words: [{ text: 'Instant', meaning: 'Java’s type for a moment in time.' }] }) }]) },
+  ],
+});
+STATES.level0 = lessonState(0, {
+  why: 'Ask whether someone is holding the seat right now.',
+  teach: {
+    trace: 'full',
+    concept: { title: 'Choosing with if', text: 'An if asks a yes-or-no question. When the answer is yes, Java runs the lines inside the curly brackets. When the answer is no, Java skips them.', bridge: 'You rated Python 4. This is the if you know from Python. Java puts the question in round brackets and uses { } where Python uses a colon and an indent.' },
+    words: [
+      { text: 'if', meaning: 'Run the block below only when the test is true.' },
+      { text: '( )', meaning: 'The test always goes inside round brackets in Java.' },
+      { text: 'seat.isHeld', meaning: 'Ask the seat whether someone is holding it. The dot means “ask this object”.' },
+      { text: '(now)', meaning: 'Ask about this moment: the time you saved on the line above.' },
+      { text: '{ }', meaning: 'The block. Type both brackets now; the line inside comes next, on its own.' },
+    ],
+  },
+});
+STATES.level1 = lessonState(1, {
+  why: 'Stop the hold when someone already has the seat.',
+  teach: {
+    trace: 'full',
+    lines: [
+      { code: 'if (seat.isHeld(now)) {', text: 'Ask the seat whether someone holds it at this moment.' },
+      { code: '    throw new SeatTaken(seatId);', text: 'If someone does, stop here and report that the seat is taken.' },
+      { code: '}', text: 'This closes the if.' },
+    ],
+    words: [{ text: 'throw', meaning: 'Stops the method at once and hands an error back to the code that called it.' }],
+  },
+});
+STATES.level3 = lessonState(3, { why: 'Refuse a seat that is already held.', teach: { trace: 'shape', blanks: [{ text: 'isHeld', hint: 'is it held?' }] } });
+STATES.level4 = lessonState(4, {
+  why: 'Refuse a held seat, then hold it and return the hold.',
+  notice: 'The method reads the clock once, so the check and the hold agree about the time.',
+  teach: { trace: 'first', outline: ['If it is held, stop and throw SeatTaken.', 'Hold it for this customer until now plus HOLD_TIME.', 'Return a new Hold with the seat’s id and its end time.'] },
+});
+STATES.level5 = lessonState(5, {
+  why: 'Write the body of holdSeat.',
+  teach: {
+    trace: 'none',
+    todo: ['Load the seat with seats.findByIdForUpdate(seatId). If it is missing, throw SeatNotFound.', 'Read the clock once and keep the time.', 'If the seat is held at that time, throw SeatTaken.', 'Hold it for this customer until that time plus HOLD_TIME, and return a new Hold.'],
+    names: ['findByIdForUpdate', 'SeatNotFound', 'SeatTaken', 'holdFor', 'Hold'],
+  },
+});
+STATES.idiom = {
+  ...STATES.level5,
+  active: null,
+  journal: [
+    ...STATES.level5.journal.slice(0, 2),
+    { id: 'i1', at: at(1), kind: 'check', command: 'mvn -q test -Dtest=SeatServiceTest', expected: 'Three tests pass.', passed: true },
+    { id: 'i2', at: at(0), kind: 'idiom', file: 'src/main/java/com/example/seats/SeatService.java', mine: 'Optional<Seat> found = seats.findByIdForUpdate(seatId);\nif (!found.isPresent()) {\n    throw new SeatNotFound(seatId);\n}\nSeat seat = found.get();', usual: 'Seat seat = seats.findByIdForUpdate(seatId)\n        .orElseThrow(() -> new SeatNotFound(seatId));', why: 'Yours works, and the check passed. The usual way is one statement, and it cannot forget the missing case, because orElseThrow makes you say what happens.' },
+    { id: 'i3', at: at(0), kind: 'suggestion', tech: 'java', name: 'Java', from: 6, to: 7, text: 'You wrote the last 10 Java pieces without asking to see the code. Java is at 6. Would 7 suit you better? Senior as it was before levels. You type the spine over the trace, and the flesh fills itself in.' },
+  ],
+};
+STATES.choice = {
+  ...SAMPLE,
+  step: SEAT_STEP,
+  active: null,
+  activity: null,
+  journal: [
+    { id: 'c1', at: at(1), kind: 'step', step: SEAT_STEP },
+    {
+      id: 'c2',
+      at: at(0),
+      kind: 'choice',
+      question: 'How should a hold stop two customers from taking the same seat?',
+      options: [
+        { label: 'Lock the seat’s row while holding it', detail: 'The database makes the second customer wait, then they see the seat is held. Simple, but each hold on a seat waits for the one before it.', pick: true },
+        { label: 'Keep each hold as its own row, one per seat', detail: 'The database refuses a second hold at once. It needs a holds table and a job that clears old holds.' },
+        { label: 'Check if the seat is free, then save', detail: 'The fewest lines. Two customers can pass the check at the same moment.', risk: 'R-bookings-01', pushback: 'With this, two customers who tap Hold at the same moment can both get the seat. You can still choose it.' },
+      ],
+    },
+    { id: 'c3', at: at(0), kind: 'level', tech: 'java', name: 'Java', from: 0, to: 10, change: 'You make the choices. Senior writes every line, runs the check and shows you the result. It starts with the next piece, and the plan stays the same.' },
+  ],
+};
+STATES.levels = { ...SAMPLE, view: 'levels', active: null, step: null };
+
+// A real project's memory, read the same way the extension reads it.
+const real = process.env.SENIOR_PREVIEW_PROJECT;
+if (real) {
+  const rel = (file) => path.relative(real, file).replace(/\\/g, '/');
+  STATES.memory.memory = memoryView({
+    ledger: loadLedger(real),
+    plans: listPlans(real).map((p) => loadPlan(real, p.feature)).filter(Boolean),
+    sessions: readSessions(real),
+    recordFile: (e) => (e._file ? rel(e._file) : `.senior/ledger/${e.id}.json`),
+    brief: (feature) => (fs.existsSync(briefPath(real, feature)) ? rel(briefPath(real, feature)) : null),
+  });
+}
+for (const state of Object.values(STATES)) state.memory ??= STATES.memory.memory;
+
+function page(theme, name, focus) {
+  const state = focus ? { ...STATES[name], focus: { id: focus, n: 1 } } : STATES[name];
   const t = THEMES[theme] ?? THEMES.dark;
   const vars = Object.entries(t.vars).map(([k, v]) => `${k}: ${v};`).join(' ');
   return `<!doctype html><html><head><meta charset="utf-8"><title>Senior panel preview</title>
@@ -208,7 +374,7 @@ html { ${vars} } body { width: 340px; margin: 0 auto; border-left: 1px solid #88
 <script>
   window.acquireVsCodeApi = () => ({ postMessage: (m) => {
     console.log('to extension', m);
-    if (m.type === 'ready') window.postMessage({ type: 'state', state: ${JSON.stringify(STATES[state] ?? SAMPLE)} }, '*');
+    if (m.type === 'ready') window.postMessage({ type: 'state', state: ${JSON.stringify(state ?? SAMPLE).replace(/</g, '\\u003c')} }, '*');
   } });
 </script></head>
 <body class="${t.class}"><div id="app"></div><script type="module" src="/webview.js"></script></body></html>`;
@@ -217,7 +383,7 @@ html { ${vars} } body { width: 340px; margin: 0 auto; border-left: 1px solid #88
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/') {
-    res.writeHead(200, { 'content-type': 'text/html' }).end(page(url.searchParams.get('theme') || 'dark', url.searchParams.get('state') || 'session'));
+    res.writeHead(200, { 'content-type': 'text/html' }).end(page(url.searchParams.get('theme') || 'dark', url.searchParams.get('state') || 'session', url.searchParams.get('focus')));
     return;
   }
   const file = path.join(dist, path.basename(url.pathname));

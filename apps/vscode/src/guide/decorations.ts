@@ -11,7 +11,10 @@ const EVIDENCE_FOR_MS = 30_000;
 export interface SlotPaint {
   lines: vscode.Range;
   traces: { at: vscode.Position; text: string }[];
-  diverged: { range: vscode.Range; wanted: string }[];
+  /** Lines that differ from the plan, with what to say at their end. */
+  diverged: { range: vscode.Range; message: string }[];
+  /** Plain sentences on empty lines that say what to write there, when only the first line is traced. */
+  notes: { at: vscode.Position; text: string }[];
   hint?: { at: vscode.Position; text: string };
 }
 
@@ -29,6 +32,10 @@ export class Decorations implements vscode.Disposable {
   // Created before the hint, so at the same spot the plan comes first and the hint after it.
   private readonly trace = vscode.window.createTextEditorDecorationType({
     after: { color: new vscode.ThemeColor('senior.traceForeground') },
+  });
+
+  private readonly note = vscode.window.createTextEditorDecorationType({
+    after: { color: new vscode.ThemeColor('senior.hintForeground'), fontStyle: 'italic' },
   });
 
   private readonly hint = vscode.window.createTextEditorDecorationType({
@@ -79,7 +86,11 @@ export class Decorations implements vscode.Disposable {
     );
     editor.setDecorations(
       this.diverged,
-      paint.diverged.map((d) => ({ range: d.range, renderOptions: { after: { contentText: `differs from the plan, which has: ${clip(d.wanted)}` } } })),
+      paint.diverged.map((d) => ({ range: d.range, renderOptions: { after: { contentText: clip(d.message, 90) } } })),
+    );
+    editor.setDecorations(
+      this.note,
+      paint.notes.map((n) => ({ range: new vscode.Range(n.at, n.at), renderOptions: { after: { contentText: visible(n.text, tab) } } })),
     );
     const hint = paint.hint;
     const clash = hint && paint.diverged.some((d) => d.range.end.line === hint.at.line);
@@ -98,6 +109,7 @@ export class Decorations implements vscode.Disposable {
       e.setDecorations(this.trace, []);
       e.setDecorations(this.hint, []);
       e.setDecorations(this.diverged, []);
+      e.setDecorations(this.note, []);
     }
   }
 
@@ -108,6 +120,7 @@ export class Decorations implements vscode.Disposable {
     this.slot.dispose();
     this.trace.dispose();
     this.hint.dispose();
+    this.note.dispose();
     this.diverged.dispose();
     this.filled.dispose();
   }
@@ -118,6 +131,6 @@ function visible(text: string, tab: number): string {
   return text.replace(/\t/g, ' '.repeat(tab)).replace(/ /g, ' ');
 }
 
-function clip(text: string): string {
-  return text.length > 60 ? `${text.slice(0, 57)}...` : text;
+function clip(text: string, max = 60): string {
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
 }

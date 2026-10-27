@@ -1,6 +1,9 @@
 // Pure text logic for guided pieces: where a piece goes, whether what the user typed matches it,
 // and what tracing text to show on each line. Nothing here touches VS Code, so it is tested with plain Node.
 
+import { profile } from '../../../../plugin/core/index.mjs';
+import type { Teaching, TraceMode } from '../panel/protocol.ts';
+
 export type Where = 'after' | 'before' | 'replace' | 'start' | 'end' | 'new_file';
 export type PieceKind = 'spine' | 'flesh' | 'probe';
 
@@ -16,6 +19,59 @@ export interface Piece {
   /** The ledger decision this piece carries out. */
   decision?: string;
   expect?: string;
+  /** The technology and the user's level in it, which decide the trace and what the panel teaches. */
+  tech?: string;
+  level?: number;
+  trace?: TraceMode;
+  concept?: Teaching['concept'];
+  words?: Teaching['words'];
+  lines?: Teaching['lines'];
+  blanks?: Teaching['blanks'];
+  outline?: string[];
+  todo?: string[];
+  names?: string[];
+}
+
+const TRACES: TraceMode[] = ['full', 'shape', 'first', 'none'];
+
+/**
+ * What the editor shows before the user types a piece. Only spine pieces fade: a probe tests a
+ * guess and is always shown in full. A piece without a level is traced in full, as before levels.
+ */
+export function traceFor(piece: Piece): TraceMode {
+  if (piece.kind !== 'spine') return 'full';
+  if (piece.trace && TRACES.includes(piece.trace)) return piece.trace;
+  if (typeof piece.level === 'number') return profile(piece.level).trace;
+  return 'full';
+}
+
+/** True when the user is learning this technology: below level 7 they type every spine piece themselves. */
+export function isLearning(piece: Pick<Piece, 'level'>): boolean {
+  return typeof piece.level === 'number' && piece.level < 7;
+}
+
+/** The teaching a piece carries, for the panel. Empty lists are left out. */
+export function teachingOf(piece: Piece, techName?: string): Teaching | undefined {
+  const t: Teaching = {};
+  if (piece.tech) t.tech = piece.tech;
+  if (techName) t.techName = techName;
+  if (typeof piece.level === 'number') t.level = piece.level;
+  if (piece.kind === 'spine') t.trace = traceFor(piece);
+  if (piece.concept?.title && piece.concept.text) t.concept = piece.concept;
+  if (piece.words?.length) t.words = piece.words;
+  if (piece.lines?.length) t.lines = piece.lines;
+  if (piece.blanks?.length) t.blanks = piece.blanks;
+  if (piece.outline?.length) t.outline = piece.outline;
+  if (piece.todo?.length) t.todo = piece.todo;
+  if (piece.names?.length) t.names = piece.names;
+  return Object.keys(t).length ? t : undefined;
+}
+
+/** Hide each blank's text behind its hint, so the trace shows the shape of a line without the names. */
+export function maskBlanks(text: string, blanks: { text: string; hint: string }[] = []): string {
+  let out = text;
+  for (const b of blanks) if (b.text) out = out.split(b.text).join(`⟨${b.hint}⟩`);
+  return out;
 }
 
 /** A span in the document, as offsets into its text. */

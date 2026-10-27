@@ -321,12 +321,12 @@ pre {
   gap: 9px;
 }
 
-/* What the senior says */
-
-.said {
-  padding-left: 10px;
-  border-left: 2px solid var(--rule);
-}
+/*
+ * What the senior says. One device per meaning: Senior's words are plain book text under a small
+ * label, coloured only when the kind of message matters (a decision coming back, a takeaway, a
+ * risk). The user's own words carry a quiet rule on the left. Boxes are kept for things the user
+ * acts on: the piece being written, a new idea, a choice.
+ */
 
 .said p {
   margin: 2px 0 0;
@@ -335,54 +335,39 @@ pre {
   line-height: 1.62;
 }
 
-.said.narration {
-  border-left-color: var(--brass);
-}
-
-.said.answer {
-  border-left-color: var(--slate);
-}
-
-.said.callback {
-  border-left-color: var(--brass);
-  background: var(--card);
-  padding: 8px 10px;
-  border-radius: 0 var(--radius) var(--radius) 0;
-}
-
-.said.callback .label {
+.said.callback .label,
+.said.level .label,
+.said.suggestion .label {
   color: var(--brass);
 }
 
-.said.takeaway {
-  border-left-color: var(--sage);
+.said.answer .label {
+  color: var(--slate);
 }
 
 .said.takeaway .label {
   color: var(--sage);
 }
 
-.said.warning {
-  border-left-color: var(--oxblood);
-}
-
 .said.warning .label {
   color: var(--oxblood);
 }
 
+.said .actions {
+  margin-top: 8px;
+}
+
 .asked {
-  padding: 8px 10px;
-  border: 1px dashed var(--rule-strong);
-  border-radius: var(--radius);
+  padding-left: 10px;
+  border-left: 2px solid var(--rule-strong);
 }
 
 .asked p {
   margin: 2px 0 0;
 }
 
-.asked.answered {
-  border-style: solid;
-  border-color: var(--rule);
+.asked:not(.answered) .label {
+  color: var(--brass);
 }
 
 .where {
@@ -538,11 +523,9 @@ pre {
   color: var(--oxblood);
 }
 
-.check,
-.summary {
-  padding: 9px 11px;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
+.check {
+  padding-left: 10px;
+  border-left: 2px solid var(--sage);
 }
 
 .check-head {
@@ -560,7 +543,7 @@ pre {
 }
 
 .check.failed {
-  border-color: color-mix(in srgb, var(--oxblood) 45%, transparent);
+  border-left-color: var(--oxblood);
 }
 
 .check.failed .verdict {
@@ -589,8 +572,8 @@ pre {
 }
 
 /* "About this line": what was already known when the user asked. */
-.said.explain {
-  border-left-color: var(--slate);
+.said.explain .label {
+  color: var(--slate);
 }
 
 .said.explain .where {
@@ -703,6 +686,370 @@ pre {
   color: var(--muted);
 }
 
+/* Inside the decision list, the row above already shows the id and the title. */
+.decision-card.bare {
+  margin: 0 0 4px;
+  padding: 2px 12px 8px;
+  border-top: none;
+  border-radius: 0 0 var(--radius) 0;
+}
+
+/* The two pages of the panel. A quiet switch, so it does not read as a third row of gears. */
+.pages {
+  margin-top: 8px;
+  display: flex;
+  gap: 16px;
+}
+
+.pages:last-child {
+  margin-bottom: 0;
+}
+
+.page {
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+  padding: 4px 0 7px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.page:hover:not(:disabled) {
+  background: none;
+  color: var(--ink);
+}
+
+.page.on {
+  color: var(--ink);
+  box-shadow: inset 0 -1.5px 0 var(--brass);
+}
+
+.count.dot-count {
+  min-width: 0;
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  margin-left: 5px;
+  vertical-align: 2px;
+}
+
+.count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  min-width: 16px;
+  font-size: 10.5px;
+  line-height: 15px;
+  text-align: center;
+  border-radius: 8px;
+  color: var(--bg);
+  background: var(--brass);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The memory page: every plan and decision in .senior/. */
+.memory {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.memory.empty p {
+  margin: 0;
+  font-family: var(--serif);
+  line-height: 1.58;
+}
+
+.memory-lede {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 13px;
+  line-height: 1.58;
+  color: var(--muted);
+}
+
+.memory-heading {
+  margin: 8px 0 0;
+  font-family: var(--serif);
+  font-weight: normal;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+}
+
+.memory-note {
+  margin: -4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.decision-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.decision-item {
+  scroll-margin-top: 8px;
+}
+
+.decision-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px 8px 12px;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--brass);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.decision-item.open .decision-row {
+  border-bottom: none;
+  border-radius: 0 var(--radius) 0 0;
+}
+
+.decision-row:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--card) 80%, var(--brass) 8%);
+}
+
+.row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.row-head code {
+  color: var(--brass);
+}
+
+.row-head .chip {
+  padding: 0 7px;
+  font-size: 11px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  color: var(--muted);
+}
+
+.row-head .chip.old {
+  color: var(--slate);
+  border-color: color-mix(in srgb, var(--slate) 50%, transparent);
+}
+
+.row-head .fold {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.row-title {
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.row-chosen {
+  font-family: var(--serif);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.replaced > summary {
+  margin-top: 4px;
+}
+
+.replaced .decision-list {
+  margin-top: 8px;
+}
+
+.plan-card {
+  margin: 0;
+  padding: 9px 12px 10px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+
+.plan-card > summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  list-style: none;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.plan-card > summary::-webkit-details-marker {
+  display: none;
+}
+
+.plan-title {
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.progress {
+  display: block;
+  margin-top: 4px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--rule);
+  overflow: hidden;
+}
+
+.progress span {
+  display: block;
+  height: 100%;
+  background: var(--sage);
+}
+
+.plan-card .goal {
+  margin: 8px 0 0;
+  font-family: var(--serif);
+  font-size: 13px;
+  line-height: 1.58;
+}
+
+.plan-card .part {
+  margin-top: 10px;
+}
+
+.plan-steps {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.plan-step details {
+  margin: 0;
+}
+
+.plan-step summary {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 2px 0;
+  color: var(--ink);
+  font-size: 13px;
+  list-style: none;
+}
+
+.plan-step summary::-webkit-details-marker {
+  display: none;
+}
+
+.plan-step .glyph {
+  flex: none;
+  width: 12px;
+  color: var(--muted);
+}
+
+.plan-step.status-done .glyph,
+.plan-step.status-active .glyph {
+  color: var(--sage);
+}
+
+.plan-step.next .glyph {
+  color: var(--brass);
+}
+
+.plan-step.status-skipped .step-name {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--rule-strong);
+}
+
+.step-name {
+  flex: 1;
+  font-family: var(--serif);
+  line-height: 1.45;
+}
+
+.plan-step .state {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.plan-step.next .state {
+  color: var(--brass);
+}
+
+.step-body {
+  margin: 2px 0 6px 19px;
+  padding-left: 9px;
+  border-left: 1px solid var(--rule);
+}
+
+.step-body p {
+  margin: 3px 0 0;
+  font-family: var(--serif);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.step-body .label {
+  margin-right: 4px;
+}
+
+.step-files {
+  margin-top: 3px;
+  display: flex;
+  flex-direction: column;
+}
+
+.step-files code {
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.plan-decisions,
+.plan-examples {
+  margin: 3px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.plan-decisions li,
+.plan-examples li {
+  font-family: var(--serif);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.plan-decisions code {
+  color: var(--brass);
+}
+
+.plan-examples li::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--muted);
+}
+
+.plan-brief {
+  margin: 10px 0 0;
+  font-size: 12px;
+}
+
 .explain .ask-more {
   margin-top: 6px;
   font-size: 12px;
@@ -788,17 +1135,24 @@ pre {
   color: var(--oxblood);
 }
 
-/* The footer */
+/* The footer. Scoped to the footer, because a piece being written also carries the class "active". */
 
-.active {
+.footer > .active {
   padding: 8px 10px;
   border-left: 2px solid var(--brass);
   background: var(--card);
   border-radius: 0 var(--radius) var(--radius) 0;
 }
 
-.active.diverged {
+.footer > .active.diverged {
   border-left-color: var(--oxblood);
+}
+
+.type-hint {
+  margin: 0 0 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
 }
 
 .active-head {
@@ -1181,4 +1535,488 @@ pre {
 .replay-entry {
   margin: 0;
   font-size: 12px;
+}
+
+/* Knowledge levels ---------------------------------------------------------------------------- */
+
+.small {
+  font-size: 11px;
+}
+
+.chip {
+  display: inline-block;
+  padding: 0 6px;
+  font-size: 10.5px;
+  line-height: 16px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 8px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.chip.tech {
+  color: var(--slate);
+}
+
+.chip.pick {
+  color: var(--sage);
+  border-color: color-mix(in srgb, var(--sage) 55%, transparent);
+}
+
+.chip.risk {
+  color: var(--oxblood);
+  border-color: color-mix(in srgb, var(--oxblood) 55%, transparent);
+}
+
+.step-level {
+  color: var(--slate);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+}
+
+.gears.learning {
+  align-items: center;
+  padding-bottom: 8px;
+}
+
+.gear-note {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.piece-body {
+  min-width: 0;
+}
+
+/* The lesson for the piece being written: what this level needs, in reading order. */
+.lesson {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lesson-part {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lesson-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.concept {
+  padding: 9px 11px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.concept h3 {
+  margin: 2px 0 4px;
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.concept p {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.concept .bridge {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--rule);
+  color: var(--muted);
+}
+
+.words,
+.code-lines,
+.todo {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.words li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1px;
+}
+
+.words.numbered li {
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 6px;
+}
+
+.words .n {
+  grid-row: span 2;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--brass);
+  text-align: center;
+}
+
+.words code,
+.code-lines code {
+  justify-self: start;
+  color: var(--ink);
+  white-space: pre;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.meaning {
+  font-family: var(--serif);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.code-lines li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 8px;
+  border-left: 1px solid var(--rule-strong);
+}
+
+.todo {
+  counter-reset: todo;
+  gap: 5px;
+}
+
+.todo li {
+  counter-increment: todo;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  font-family: var(--serif);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.todo li::before {
+  content: counter(todo) ".";
+  font-family: var(--sans);
+  font-size: 11px;
+  line-height: 20px;
+  color: var(--muted);
+}
+
+.names {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.names code {
+  padding: 0 5px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+}
+
+.review {
+  margin-top: 4px;
+}
+
+.review > summary {
+  font-size: 11.5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.review[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* A choice the user makes, and the usual way beside their own. */
+.choice,
+.idiom {
+  padding: 10px 11px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.choice h3 {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 7px 9px;
+  text-align: left;
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+
+.option:hover:not(:disabled) {
+  background: none;
+  border-color: var(--brass);
+}
+
+.option.pending {
+  border-color: var(--oxblood);
+}
+
+.option.picked {
+  border-color: var(--brass);
+  background: var(--card);
+  opacity: 1;
+}
+
+.option.other {
+  opacity: 0.45;
+}
+
+.option:disabled {
+  cursor: default;
+}
+
+.option-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.option-label {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.option-detail {
+  font-family: var(--serif);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.pushback {
+  padding-left: 10px;
+  border-left: 2px solid var(--oxblood);
+}
+
+.pushback p {
+  margin: 0 0 6px;
+  font-family: var(--serif);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.choice > .quiet {
+  margin: 0;
+  font-size: 11.5px;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.version {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+}
+
+.version pre {
+  margin: 0;
+  padding: 6px 8px;
+  border-left: 2px solid var(--rule-strong);
+  background: var(--vscode-textCodeBlock-background, var(--card));
+  overflow-x: auto;
+  /* Real lines matter to someone learning the language: a wrapped line looks like two statements. */
+  white-space: pre;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.version.usual pre {
+  border-left-color: var(--brass);
+}
+
+.version.kept pre {
+  border-left-color: var(--sage);
+}
+
+.said-text {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.idiom > .quiet {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* The Levels page. */
+.levels {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.levels.empty p {
+  font-family: var(--serif);
+  color: var(--muted);
+}
+
+.levels-intro h1,
+.levels-group h2 {
+  margin: 0 0 4px;
+  font-family: var(--serif);
+  font-weight: normal;
+}
+
+.levels-intro h1 {
+  font-size: 18px;
+}
+
+.levels-group h2 {
+  font-size: 15px;
+}
+
+.levels-intro p {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.levels-group {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+}
+
+.levels-group > .quiet {
+  margin: -10px 0 0;
+  font-size: 12px;
+}
+
+.level-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.level-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.level-name {
+  font-family: var(--serif);
+  font-size: 14.5px;
+}
+
+.level-head .quiet {
+  min-width: 0;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scale {
+  display: grid;
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.scale button {
+  border: none;
+  border-radius: 0;
+  border-right: 1px solid var(--rule);
+  background: none;
+  color: var(--muted);
+  padding: 5px 0;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.scale button:last-child {
+  border-right: none;
+}
+
+.scale button:hover:not(:disabled) {
+  background: var(--card);
+  color: var(--ink);
+}
+
+.scale button.on {
+  background: var(--brass);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+.level-row.unrated .scale {
+  border-style: dashed;
+}
+
+.level-meaning {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.level-meaning strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.level-change {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--sans);
+  font-size: 11.5px;
+}
+
+.learned {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }

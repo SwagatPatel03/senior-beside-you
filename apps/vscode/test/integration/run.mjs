@@ -30,8 +30,9 @@ const ideDir = path.join(base, 'ide');
 fs.mkdirSync(path.join(workspace, 'src'), { recursive: true });
 fs.mkdirSync(path.join(workspace, '.senior', 'sessions'), { recursive: true });
 
-// The voice test speaks real sentences; on Windows they are spoken at zero volume.
-const env = { SENIOR_IDE_DIR: ideDir, SENIOR_TEST_WORKSPACE: workspace, SENIOR_VOICE_VOLUME: '0' };
+// The voice test speaks real sentences; on Windows they are spoken at zero volume. The levels tests
+// write the user's levels, so they get their own file instead of the one in the home folder.
+const env = { SENIOR_IDE_DIR: ideDir, SENIOR_TEST_WORKSPACE: workspace, SENIOR_VOICE_VOLUME: '0', SENIOR_LEVELS_FILE: path.join(base, 'levels.json') };
 
 if (e2e) {
   const write = (rel, text) => {
@@ -110,6 +111,13 @@ if (e2e) {
       2,
     )}\n`,
   );
+  // SENIOR_E2E_LEVEL=0 pairs as someone who has never written JavaScript.
+  const level = process.env.SENIOR_E2E_LEVEL;
+  if (level !== undefined && level !== '') {
+    const now = new Date().toISOString();
+    fs.writeFileSync(env.SENIOR_LEVELS_FILE, `${JSON.stringify({ version: 1, levels: { javascript: { level: Number(level), name: 'JavaScript', history: [{ level: Number(level), at: now }] } }, words: {} }, null, 2)}\n`);
+    env.SENIOR_E2E_LEVEL = level;
+  }
   const finder = process.platform === 'win32' ? 'where claude' : 'command -v claude';
   env.CLAUDE_BIN = execSync(finder, { encoding: 'utf8' }).split(/\r?\n/)[0].trim();
   env.SENIOR_PLUGIN_DIR = path.join(repo, 'plugin');

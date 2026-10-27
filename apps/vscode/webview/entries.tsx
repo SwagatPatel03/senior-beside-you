@@ -1,5 +1,6 @@
 import { Fragment, type ComponentChildren } from 'preact';
 import type { DecisionDetail, JournalEntry, PieceView } from '../src/panel/protocol.ts';
+import { ChoiceCard, IdiomCard, Lesson, LessonReview, LevelChanged, Suggestion, TechChip } from './lesson.tsx';
 import { send } from './vscode.ts';
 
 const PIECE_STATUS: Record<PieceView['status'], { glyph: string; label: string }> = {
@@ -18,11 +19,11 @@ const PIECE_STATUS: Record<PieceView['status'], { glyph: string; label: string }
 const KIND_LABEL: Record<PieceView['kind'], string> = { spine: 'Yours', flesh: "Senior's", probe: 'Probe' };
 
 /** Lower-case the first letter so a stored sentence can continue another, unless it starts with a name such as SQL. */
-function lowerFirst(text: string): string {
+export function lowerFirst(text: string): string {
   return /^[A-Z](?:[a-z]|\s)/.test(text) ? text[0].toLowerCase() + text.slice(1) : text;
 }
 
-function FileLink({ file, line }: { file: string; line?: number }) {
+export function FileLink({ file, line }: { file: string; line?: number }) {
   return (
     <button class="file link" title={`Open ${file}`} onClick={() => send({ type: 'openFile', file, ...(line ? { line } : {}) })}>
       {file}
@@ -56,15 +57,17 @@ function Pieces({ pieces }: { pieces: PieceView[] }) {
             <span class="glyph" aria-hidden="true">
               {PIECE_STATUS[p.status].glyph}
             </span>
-            <div>
+            <div class="piece-body">
               <div class="piece-head">
                 <span class={`kind ${p.kind}`}>{KIND_LABEL[p.kind]}</span>
+                {p.kind !== 'flesh' && <TechChip teach={p.teach} />}
                 {!shared && <FileLink file={p.file} />}
-                <span class="state">{PIECE_STATUS[p.status].label}</span>
+                <span class="state">{p.revealed && p.status !== 'active' ? `${PIECE_STATUS[p.status].label}, after seeing the code` : PIECE_STATUS[p.status].label}</span>
               </div>
               <p class="why">{p.why}</p>
               {p.expect && <p class="expect">If the guess is right: {p.expect}</p>}
               {p.detail && p.status === 'failed' && <p class="detail">{p.detail}</p>}
+              {p.status === 'active' ? <Lesson piece={p} /> : p.status !== 'waiting' && <LessonReview piece={p} />}
             </div>
           </li>
         ))}
@@ -73,7 +76,7 @@ function Pieces({ pieces }: { pieces: PieceView[] }) {
   );
 }
 
-function Part({ label, children }: { label: string; children: ComponentChildren }) {
+export function Part({ label, children }: { label: string; children: ComponentChildren }) {
   return (
     <section class="part">
       <span class="label">{label}</span>
@@ -82,17 +85,25 @@ function Part({ label, children }: { label: string; children: ComponentChildren 
   );
 }
 
-/** One ledger decision in full: the parts the hover card shows, then everything else, then the stored record. */
-function DecisionCard({ d }: { d: DecisionDetail }) {
+/**
+ * One ledger decision in full: the parts the hover card shows, then everything else, then the
+ * stored record. Inside a list that already shows its id and title, `bare` leaves them out.
+ */
+export function DecisionCard({ d, bare = false, onDecision }: { d: DecisionDetail; bare?: boolean; onDecision?: (id: string) => void }) {
   const replaces = d.replaces;
+  const openDecision = onDecision ?? ((id: string) => send({ type: 'showDecision', id }));
   return (
-    <article class="decision-card">
-      <div class="decision-head">
-        <code>{d.id}</code>
-        <span class="chip">{d.undo}</span>
-        <span class={`chip ${d.replacedBy ? 'old' : 'live'}`}>{d.replacedBy ? `Replaced by ${d.replacedBy}` : 'Still in force'}</span>
-      </div>
-      <h2>{d.title}</h2>
+    <article class={`decision-card ${bare ? 'bare' : ''}`}>
+      {!bare && (
+        <>
+          <div class="decision-head">
+            <code>{d.id}</code>
+            <span class="chip">{d.undo}</span>
+            <span class={`chip ${d.replacedBy ? 'old' : 'live'}`}>{d.replacedBy ? `Replaced by ${d.replacedBy}` : 'Still in force'}</span>
+          </div>
+          <h2>{d.title}</h2>
+        </>
+      )}
       <Part label="What we chose">
         <p>{d.chosen}</p>
       </Part>
@@ -128,7 +139,7 @@ function DecisionCard({ d }: { d: DecisionDetail }) {
       {replaces && (
         <Part label="What it replaced">
           <p>
-            <button class="link" onClick={() => send({ type: 'showDecision', id: replaces.id })}>
+            <button class="link" onClick={() => openDecision(replaces.id)}>
               {replaces.id}
             </button>
             {replaces.title ? ` ${replaces.title}.` : '.'}
@@ -138,7 +149,7 @@ function DecisionCard({ d }: { d: DecisionDetail }) {
       )}
       <Part label="Where it lives in the code">
         {d.files.length === 0 && d.symbols.length === 0 ? (
-          <p>It is not linked to any code yet.</p>
+          <p>It is not linked to any code yet. It is linked when the step of the plan that carries it out is built.</p>
         ) : (
           <ul class="links">
             {d.symbols.map((sym) => (
@@ -284,8 +295,6 @@ export function Entry({ entry }: { entry: JournalEntry }) {
           </button>
         </article>
       );
-    case 'decision':
-      return <DecisionCard d={entry.decision} />;
     case 'summary':
       return (
         <section class="summary">
@@ -320,6 +329,14 @@ export function Entry({ entry }: { entry: JournalEntry }) {
       );
     case 'notice':
       return <p class={`notice ${entry.tone ?? 'info'}`}>{entry.text}</p>;
+    case 'choice':
+      return <ChoiceCard entry={entry} />;
+    case 'idiom':
+      return <IdiomCard entry={entry} />;
+    case 'level':
+      return <LevelChanged entry={entry} />;
+    case 'suggestion':
+      return <Suggestion entry={entry} />;
     case 'replay':
       return (
         <p class="replay-entry">

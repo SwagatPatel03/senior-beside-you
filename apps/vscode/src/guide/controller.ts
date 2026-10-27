@@ -6,11 +6,26 @@
 
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import type { Divergence, Gear, PieceAction, PieceKind, PieceView } from '../panel/protocol.ts';
+import { techName } from '../../../../plugin/core/index.mjs';
+import type { Divergence, Gear, PieceAction, PieceKind, PieceView, TraceMode } from '../panel/protocol.ts';
 import type { SessionStore } from '../session.ts';
 import type { Decorations, SlotPaint } from './decorations.ts';
 import type { QuietOthers } from './quiet.ts';
-import { blankLines, expectedOf, isComplete, locate, strayClosers, traceLines, writtenLineCount, type Expected, type LineView, type Piece } from './text.ts';
+import { blankLines, expectedOf, indentOf, isComplete, isLearning, locate, maskBlanks, strayClosers, teachingOf, traceFor, traceLines, writtenLineCount, type Expected, type LineView, type Piece } from './text.ts';
+
+/** The technology a file belongs to and the user's level in it, when they have rated it. */
+export type TechResolver = (file: string) => { id: string; name: string; level: number } | null;
+
+/** A finished piece, for the level suggestions: what it was about and how it ended. */
+export interface FinishedPiece {
+  tech?: string;
+  level?: number;
+  kind: PieceKind;
+  status: PieceOutcome;
+  revealed: boolean;
+  /** How many words the piece explained: words that were new to the user. */
+  newWords: number;
+}
 
 export type PieceOutcome = 'typed' | 'accepted' | 'watched' | 'filled' | 'kept_own' | 'skipped' | 'failed';
 
@@ -35,6 +50,8 @@ interface Run {
   index: number;
   state: 'running' | 'done' | 'error';
   error?: string;
+  /** The pieces exactly as Claude sent them, to recognise a repeated guide call. */
+  source: string;
   entryId: string;
   views: PieceView[];
   settle?: (result: PieceResult) => void;
@@ -57,6 +74,13 @@ interface Slot {
   /** The document line the cursor was last on, to tidy that line when the cursor leaves it. */
   lastLine?: number;
   divergence?: Divergence;
+  /** What the editor shows before the user types, and whether they asked to see the full code. */
+  trace: TraceMode;
+  revealed: boolean;
+  /** Below level 7 the user types every spine piece: Tab and the watch gear do not take it from them. */
+  learning: boolean;
+  /** Set while the user's own version is being saved, so no tidying edit races it. */
+  finishing?: boolean;
 }
 
 class PieceError extends Error {}
@@ -69,11 +93,16 @@ export class GuideController implements vscode.Disposable {
   /** Edits Senior has sent and not yet seen come back as change events. */
   private readonly pendingOwn: { doc: vscode.TextDocument; offset: number; length: number; text: string }[] = [];
   private typing: NodeJS.Timeout | null = null;
-  private inSlotKey = false;
   private readonly wakers = new Set<() => void>();
   private readonly slotChanged = new vscode.EventEmitter<void>();
   /** Fires when a piece opens or closes, or the gear changes how it is shown. */
   readonly onDidChangeSlot = this.slotChanged.event;
+  private readonly pieceFinished = new vscode.EventEmitter<FinishedPiece>();
+  /** Fires when the user finishes a handwritten piece, for the level suggestions. */
+  readonly onDidFinishPiece = this.pieceFinished.event;
+  /** Finds the user's level for a piece that does not carry one. Set by the extension. */
+  techFor: TechResolver | null = null;
+  private readonly keys = new Map<string, boolean>();
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
@@ -84,6 +113,7 @@ export class GuideController implements vscode.Disposable {
   ) {
     this.disposables.push(
       this.slotChanged,
+      this.pieceFinished,
       vscode.workspace.onDidChangeTextDocument((e) => this.onChange(e)),
       vscode.window.onDidChangeTextEditorSelection((e) => this.onSelection(e)),
       vscode.window.onDidChangeActiveTextEditor(() => this.updateKeys()),
@@ -104,9 +134,27 @@ export class GuideController implements vscode.Disposable {
   }
 
   /** The slot being written, for diagnostics and tests. */
-  inspect(): { file: string; kind: PieceKind; expected: string; region: string; start: number; end: number; lines: LineView[]; divergence?: Divergence } | null {
+  inspect(): {
+    file: string;
+    kind: PieceKind;
+    expected: string;
+    region: string;
+    start: number;
+    end: number;
+    lines: LineView[];
+    divergence?: Divergence;
+    trace: TraceMode;
+    revealed: boolean;
+    /** What the editor draws on each line of the piece: the trace as shown, with blanks hidden. */
+    shown: string[];
+    /** The plain sentences drawn on empty lines when only the first line is traced. */
+    notes: string[];
+  } | null {
     const slot = this.slot;
     if (!slot) return null;
+    const { lines } = this.view(slot);
+    const paint = this.paintFor(slot);
+    const first = slot.doc.positionAt(slot.start).line;
     return {
       file: slot.piece.file,
       kind: slot.piece.kind,
@@ -114,8 +162,12 @@ export class GuideController implements vscode.Disposable {
       region: this.regionText(slot),
       start: slot.start,
       end: slot.end,
-      lines: this.view(slot).lines,
+      lines,
       ...(slot.divergence ? { divergence: slot.divergence } : {}),
+      trace: slot.trace,
+      revealed: slot.revealed,
+      shown: lines.map((l) => paint.traces.filter((t) => t.at.line === first + l.line).map((t) => t.text).join('')),
+      notes: paint.notes.map((n) => n.text.trim()),
     };
   }
 
@@ -124,27 +176,33 @@ export class GuideController implements vscode.Disposable {
   }
 
   /** Start guiding a list of pieces. A call with the same pieces as the running guide just keeps waiting. */
-  start(pieces: Piece[]): void {
-    const problems = this.check(pieces);
+  start(given: Piece[]): void {
+    const problems = this.check(given);
     if (problems.length) throw new Error(problems.join(' '));
     this.decorations.clearEvidence();
+    const source = JSON.stringify(given);
     if (this.run?.state === 'running') {
-      if (JSON.stringify(this.run.pieces) === JSON.stringify(pieces)) return;
+      if (this.run.source === source) return;
       this.cancelRun('Replaced by a new set of pieces.');
     }
-    const views: PieceView[] = pieces.map((p, i) => ({
-      index: i,
-      kind: p.kind,
-      file: p.file,
-      why: p.why,
-      lines: writtenLineCount(p.text),
-      status: 'waiting',
-      ...(p.expect ? { expect: p.expect } : {}),
-      ...(p.notice ? { notice: p.notice } : {}),
-      ...(p.decision ? { decision: p.decision } : {}),
-    }));
+    const pieces = given.map((p) => this.withLevel(p));
+    const views: PieceView[] = pieces.map((p, i) => {
+      const teach = teachingOf(p, p.tech ? techName(p.tech) : undefined);
+      return {
+        index: i,
+        kind: p.kind,
+        file: p.file,
+        why: p.why,
+        lines: writtenLineCount(p.text),
+        status: 'waiting',
+        ...(p.expect ? { expect: p.expect } : {}),
+        ...(p.notice ? { notice: p.notice } : {}),
+        ...(p.decision ? { decision: p.decision } : {}),
+        ...(teach ? { teach } : {}),
+      };
+    });
     const entry = this.session.add({ kind: 'pieces', pieces: views });
-    const run: Run = { pieces, results: [], index: 0, state: 'running', entryId: entry.id, views, touched: new Set() };
+    const run: Run = { pieces, results: [], index: 0, state: 'running', source, entryId: entry.id, views, touched: new Set() };
     this.run = run;
     void this.drive(run);
   }
@@ -210,7 +268,7 @@ export class GuideController implements vscode.Disposable {
   /** Take the whole piece as planned: Tab in the accept gear. */
   async acceptPiece(): Promise<void> {
     const slot = this.slot;
-    if (!slot) return;
+    if (!slot || slot.learning) return;
     this.stopTyping();
     await this.replaceRegion(slot, slot.body);
     await this.finish(slot, 'accepted');
@@ -226,6 +284,24 @@ export class GuideController implements vscode.Disposable {
       return;
     }
     if (!slot) return;
+    if (action === 'reveal') {
+      // The user asked to see the code. It stays theirs to type; only the trace comes back in full.
+      if (slot.revealed || slot.trace === 'full') return;
+      slot.revealed = true;
+      slot.divergence = undefined;
+      if (this.session.active) this.session.active = { ...this.session.active, revealed: true, diverged: undefined };
+      if (this.run) this.setView(this.run, slot.index, 'active', undefined, true);
+      this.session.record({ type: 'revealed', file: slot.piece.file, ...(slot.piece.tech ? { tech: slot.piece.tech } : {}), ...(typeof slot.piece.level === 'number' ? { level: slot.piece.level } : {}) });
+      this.session.changed();
+      this.render();
+      this.updateKeys();
+      return;
+    }
+    if (action === 'done') {
+      // A piece written from a description is finished when the user says so, in their own words.
+      if (!this.regionText(slot).trim()) return;
+      action = 'keepMine';
+    }
     if (action === 'fillIn') {
       this.stopTyping();
       await this.replaceRegion(slot, slot.body);
@@ -241,6 +317,7 @@ export class GuideController implements vscode.Disposable {
         .map((l) => (l.trim() ? l : ''))
         .join(slot.eol)
         .replace(/(\r?\n)+$/, '');
+      slot.finishing = true;
       if (mine !== this.regionText(slot)) await this.replaceRegion(slot, mine);
       await this.finish(slot, 'kept_own', mine);
     } else if (action === 'showAgain') {
@@ -323,8 +400,12 @@ export class GuideController implements vscode.Disposable {
       piece,
       index,
       watched: false,
+      trace: traceFor(piece),
+      revealed: false,
+      learning: piece.kind === 'spine' && isLearning(piece),
     };
     this.slot = slot;
+    const teach = run.views[index].teach;
     this.session.active = {
       index,
       total: run.pieces.length,
@@ -333,13 +414,14 @@ export class GuideController implements vscode.Disposable {
       why: piece.why,
       ...(piece.notice ? { notice: piece.notice } : {}),
       ...(piece.decision ? { decision: piece.decision } : {}),
+      ...(teach ? { teach } : {}),
       watching: false,
     };
     this.session.changed();
     this.placeCursor(slot);
     this.render();
     this.slotChanged.fire();
-    if (this.session.gear === 'watch') this.startTyping(slot);
+    if (this.gearFor(slot) === 'watch') this.startTyping(slot);
 
     return new Promise<PieceResult>((resolve) => {
       run.settle = resolve;
@@ -361,10 +443,12 @@ export class GuideController implements vscode.Disposable {
     else if (status === 'accepted') this.session.stats.accepted += lines;
     else if (status === 'watched') this.session.stats.watched += lines;
     else if (status === 'filled') this.session.stats.filled += lines;
+    const { tech, level } = slot.piece;
     if (status === 'typed' || status === 'kept_own') {
-      this.session.record({ type: 'typed', file: slot.piece.file, lines, gear: this.session.gear });
+      this.session.record({ type: 'typed', file: slot.piece.file, lines, gear: this.gearFor(slot), ...(tech ? { tech } : {}), ...(typeof level === 'number' ? { level } : {}) });
     }
     this.session.changed();
+    this.pieceFinished.fire({ ...(tech ? { tech } : {}), ...(typeof level === 'number' ? { level } : {}), kind: slot.piece.kind, status, revealed: slot.revealed, newWords: slot.piece.words?.length ?? 0 });
     const result: PieceResult = { index: slot.index, file: slot.piece.file, kind: slot.piece.kind, status, ...(text !== undefined ? { text } : {}) };
     this.run?.settle?.(result);
   }
@@ -417,7 +501,8 @@ export class GuideController implements vscode.Disposable {
     this.updateKeys();
     if (!slot || e.textEditor.document !== slot.doc) return;
     const line = e.selections[0].active.line;
-    if (slot.lastLine !== undefined && slot.lastLine !== line && !this.typing) void this.tidyLine(slot, slot.lastLine);
+    // Tidying is cosmetic. When the piece finishes at the same moment, its edit loses the race; that is fine.
+    if (slot.lastLine !== undefined && slot.lastLine !== line && !this.typing) void this.tidyLine(slot, slot.lastLine).catch(() => undefined);
     slot.lastLine = line;
     this.render();
   }
@@ -427,6 +512,7 @@ export class GuideController implements vscode.Disposable {
    * the line matches the plan without them: "if (x) {" leaves "if (x) {}" behind.
    */
   private async tidyLine(slot: Slot, docLine: number): Promise<void> {
+    if (slot.finishing || this.slot !== slot) return;
     const first = slot.doc.positionAt(slot.start).line;
     const want = slot.expected.raw[docLine - first];
     if (!want?.trim() || docLine >= slot.doc.lineCount) return;
@@ -442,7 +528,7 @@ export class GuideController implements vscode.Disposable {
     void vscode.commands.executeCommand('setContext', 'senior.gear', gear);
     const slot = this.slot;
     if (!slot) return;
-    if (gear === 'watch') this.startTyping(slot);
+    if (this.gearFor(slot) === 'watch') this.startTyping(slot);
     else this.stopTyping();
     this.render();
     this.slotChanged.fire();
@@ -453,8 +539,12 @@ export class GuideController implements vscode.Disposable {
       void this.finish(slot, slot.watched ? 'watched' : 'typed');
       return;
     }
-    const wrong = this.view(slot).lines.find((l) => l.state === 'diverged');
-    const divergence = wrong ? { wrote: wrong.wrote ?? '', wanted: wrong.wanted ?? '' } : undefined;
+    // Written from a description, the user's version is expected to differ; it is theirs until they say it is done.
+    const own = !slot.revealed && (slot.trace === 'first' || slot.trace === 'none');
+    const wrong = own ? undefined : this.view(slot).lines.find((l) => l.state === 'diverged');
+    // A faded trace never gives the answer away in the panel; the user can ask to see it.
+    const hidden = !slot.revealed && slot.trace === 'shape';
+    const divergence = wrong ? { wrote: wrong.wrote ?? '', wanted: hidden ? '' : (wrong.wanted ?? '') } : undefined;
     if (JSON.stringify(divergence) !== JSON.stringify(slot.divergence)) {
       slot.divergence = divergence;
       if (this.session.active) this.session.active = { ...this.session.active, ...(divergence ? { diverged: divergence } : { diverged: undefined }) };
@@ -590,34 +680,94 @@ export class GuideController implements vscode.Disposable {
     this.updateKeys();
     const editor = this.editorFor(slot);
     if (!editor) return;
+    this.decorations.showSlot(editor, this.paintFor(slot));
+  }
+
+  /** Everything drawn for the piece: the trace as the level shows it, plain sentences, divergences and the hint. */
+  private paintFor(slot: Slot): SlotPaint {
     const first = slot.doc.positionAt(slot.start).line;
     const last = slot.doc.positionAt(slot.end).line;
     const { lines, cursorLine } = this.view(slot);
-    const paint: SlotPaint = { lines: new vscode.Range(first, 0, last, 0), traces: [], diverged: [] };
+    const paint: SlotPaint = { lines: new vscode.Range(first, 0, last, 0), traces: [], diverged: [], notes: [] };
+    const mode: TraceMode = slot.revealed ? 'full' : slot.trace;
+    const firstContent = slot.expected.content[0] ?? 0;
+    const outline = slot.piece.outline ?? [];
     for (const l of lines) {
       const docLine = first + l.line;
       if (docLine >= slot.doc.lineCount) continue;
+      // Nothing is traced: the user writes from the list in the panel.
+      if (mode === 'none') continue;
+      // Only the first line is traced; each empty line after it carries a plain sentence on what goes there.
+      if (mode === 'first' && l.line > firstContent) {
+        if (l.state === 'empty') {
+          const k = slot.expected.content.indexOf(l.line) - 1;
+          const say = outline[k];
+          const text = slot.doc.lineAt(docLine).text;
+          const want = slot.expected.raw[l.line] ?? '';
+          const pad = Math.max(0, indentOf(want).length - text.length);
+          if (say) paint.notes.push({ at: new vscode.Position(docLine, text.length), text: `${' '.repeat(pad)}${say}` });
+        }
+        continue;
+      }
       if (l.state === 'diverged') {
         const text = slot.doc.lineAt(docLine).text;
         const lead = text.length - text.trimStart().length;
-        paint.diverged.push({ range: new vscode.Range(docLine, lead, docLine, text.length), wanted: l.wanted ?? '' });
+        const message = mode === 'shape' ? 'differs from the plan · Alt+S shows the whole line' : `differs from the plan, which has: ${l.wanted ?? ''}`;
+        if (mode !== 'first') paint.diverged.push({ range: new vscode.Range(docLine, lead, docLine, text.length), message });
       }
-      for (const part of l.trace) paint.traces.push({ at: new vscode.Position(docLine, part.column), text: part.text });
+      for (const part of l.trace) {
+        const shown = mode === 'shape' ? maskBlanks(part.text, slot.piece.blanks) : part.text;
+        paint.traces.push({ at: new vscode.Position(docLine, part.column), text: shown });
+      }
     }
     const hintLine = cursorLine >= 0 ? first + cursorLine : last;
     const hint = this.hintText(slot);
     if (hint && hintLine < slot.doc.lineCount) paint.hint = { at: slot.doc.lineAt(hintLine).range.end, text: hint };
-    this.decorations.showSlot(editor, paint);
+    return paint;
   }
 
   private hintText(slot: Slot): string {
-    const gear = this.session.gear;
+    const gear = this.gearFor(slot);
     if (gear === 'watch') return 'Senior is typing · Esc to take over';
     if (gear === 'accept') return 'Tab accepts this piece';
+    if (!slot.revealed) {
+      if (slot.trace === 'none') return this.regionText(slot).trim() ? 'Ctrl+Alt+Enter when it is done · Alt+S shows the code' : 'Write it from the list in the Senior panel · Alt+S shows the code';
+      if (slot.trace === 'first') return this.regionText(slot).trim() ? 'Ctrl+Alt+Enter when it is done · Alt+S shows the code' : (slot.piece.notice ?? 'Alt+S shows the code');
+      if (slot.trace === 'shape') return slot.piece.notice ?? 'Alt+S shows the whole line';
+    }
     return slot.piece.notice ?? '';
   }
 
-  /** `senior.inSlot` lets Enter go to the next planned line only while the cursor is in a piece. */
+  /** Learning pieces are always typed: the accept and watch gears would take the typing away. */
+  private gearFor(slot: Slot): Gear {
+    return slot.learning ? 'type' : this.session.gear;
+  }
+
+  /**
+   * A piece without a level gets the user's level for its file, when they have rated that
+   * technology. Pieces Claude sends with a level keep it.
+   */
+  private withLevel(piece: Piece): Piece {
+    if (typeof piece.level === 'number' || piece.kind === 'flesh' || !this.techFor) return piece;
+    try {
+      const tech = this.techFor(piece.file);
+      return tech ? { ...piece, tech: piece.tech ?? tech.id, level: tech.level } : piece;
+    } catch {
+      return piece;
+    }
+  }
+
+  private setKey(name: string, value: boolean): void {
+    if (this.keys.get(name) === value) return;
+    this.keys.set(name, value);
+    void vscode.commands.executeCommand('setContext', name, value);
+  }
+
+  /**
+   * `senior.inSlot` lets Enter go to the next planned line only while the cursor is in a piece.
+   * `senior.learning` keeps Tab from accepting a piece the user is learning to write, and
+   * `senior.faded` lets Alt+S show the full code of a piece whose trace is faded or hidden.
+   */
   private updateKeys(): void {
     const slot = this.slot;
     const editor = vscode.window.activeTextEditor;
@@ -626,9 +776,10 @@ export class GuideController implements vscode.Disposable {
       const offset = slot.doc.offsetAt(editor.selection.active);
       inside = offset >= slot.start && offset <= slot.end;
     }
-    if (inside === this.inSlotKey) return;
-    this.inSlotKey = inside;
-    void vscode.commands.executeCommand('setContext', 'senior.inSlot', inside);
+    this.setKey('senior.inSlot', inside);
+    this.setKey('senior.learning', !!slot?.learning);
+    this.setKey('senior.faded', !!slot && !slot.revealed && slot.trace !== 'full');
+    this.setKey('senior.ownVersion', !!slot && !slot.revealed && (slot.trace === 'first' || slot.trace === 'none'));
   }
 
   private clearSlot(): void {
@@ -686,8 +837,8 @@ export class GuideController implements vscode.Disposable {
     slot.end = slot.start;
   }
 
-  private setView(run: Run, index: number, status: PieceView['status'], detail?: string): void {
-    run.views[index] = { ...run.views[index], status, ...(detail ? { detail } : {}) };
+  private setView(run: Run, index: number, status: PieceView['status'], detail?: string, revealed?: boolean): void {
+    run.views[index] = { ...run.views[index], status, ...(detail ? { detail } : {}), ...(revealed ? { revealed } : {}) };
     this.session.update({ id: run.entryId, at: new Date().toISOString(), kind: 'pieces', pieces: [...run.views] });
   }
 

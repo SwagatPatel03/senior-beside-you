@@ -245,3 +245,93 @@ export declare function saveReplay(root: string, input: ReplayInput, options?: {
 export declare function loadReplay(root: string, id: string): Replay | null;
 export declare function listReplays(root: string): { id: string; title: string; createdAt: string; scenes: number; source: string }[];
 export declare function renderReplayMarkdown(replay: Replay): string;
+
+// levels
+export type TraceMode = 'full' | 'shape' | 'first' | 'none';
+
+export interface LevelProfile {
+  level: number;
+  name: string;
+  anchor: string;
+  change: string;
+  typeShare: number;
+  pieceLines: number | null;
+  partLines: number | null;
+  trace: TraceMode;
+  words: 'every' | 'new' | 'none';
+  concepts: boolean | 'big';
+  readFirst: boolean;
+  idiom: boolean;
+  fillIn: boolean;
+  gear: 'type' | 'accept' | 'watch' | null;
+  design: string;
+  checks: string;
+  failure: string;
+  guide: string[];
+}
+
+export interface LevelEntry {
+  level: number;
+  name?: string;
+  history: { level: number; at: string }[];
+}
+
+export interface LevelsData {
+  version: 1;
+  levels: Record<string, LevelEntry>;
+  words: Record<string, string[]>;
+}
+
+export interface TechLevel {
+  id: string;
+  name: string;
+  level: number;
+  rated: boolean;
+}
+
+export declare const DEFAULT_LEVEL: 7;
+export declare const PROFILES: LevelProfile[];
+export declare function profile(level: number): LevelProfile;
+export declare function clampLevel(level: unknown): number;
+export declare function isLevel(value: unknown): value is number;
+export declare function levelsFile(): string;
+export declare function loadLevels(file?: string): LevelsData;
+export declare function techId(name: string): string;
+export declare function levelOf(id: string, data?: LevelsData): number | null;
+export declare function effectiveLevel(id: string, data?: LevelsData): number;
+export declare function setLevel(id: string, level: number, options?: { name?: string; now?: Date; file?: string }): number | null;
+export declare function knownWords(id: string, data?: LevelsData): string[];
+export declare function addWords(id: string, words: string[], options?: { file?: string }): string[];
+export declare function bridgesFor(id: string, level: number, data?: LevelsData): { id: string; name: string; level: number }[];
+export declare function profileBrief(tech: TechLevel, data?: LevelsData): string;
+export declare function dayOf(iso: string): string;
+
+// stack
+export interface StackTechnology {
+  id: string;
+  name: string;
+  found?: string[];
+  within?: string;
+  added?: boolean;
+  files?: string[];
+}
+
+export interface Stack {
+  technologies: StackTechnology[];
+  codebase: { level: number | null };
+}
+
+export declare const CATALOG: { id: string; name: string; within?: string; files: string[] }[];
+export declare function detectStack(root: string): StackTechnology[];
+export declare function stackPath(root: string): string;
+export declare function loadStack(root: string): Stack | null;
+export declare function saveStack(root: string, stack: Stack): Stack;
+export declare function refreshStack(root: string): { stack: Stack; added: string[] };
+export declare function addTechnology(root: string, name: string, files?: string[]): StackTechnology;
+export declare function currentStack(root: string): Stack;
+export declare function techForPath(stack: Stack, rel: string, data?: LevelsData): TechLevel | null;
+export declare function stackLevels(stack: Stack, data?: LevelsData): { id: string; name: string; found: string[]; level: number | null }[];
+export declare function unratedTechnologies(stack: Stack, data?: LevelsData): { id: string; name: string; found: string[]; level: number | null }[];
+export declare function techName(id: string): string;
+export declare function levelsText(root: string, data?: LevelsData): string;
+export declare function setCodebaseLevel(root: string, level: number): void;

@@ -2,7 +2,7 @@
 
 import * as vscode from 'vscode';
 import { appendEvent, findRoot } from '../../../plugin/core/index.mjs';
-import type { ActivePiece, Activity, Connection, Gear, JournalEntry, PanelMeta, PanelState, ReplayPlace, ReplaySummary, ReplayView, SayKind, Stats, StepInfo } from './panel/protocol.ts';
+import type { ActivePiece, Activity, Connection, Gear, JournalEntry, LevelsView, MemoryView, PanelMeta, PanelState, PanelView, ReplayPlace, ReplaySummary, ReplayView, SayKind, Stats, StepInfo } from './panel/protocol.ts';
 
 const MAX_JOURNAL = 300;
 
@@ -10,6 +10,13 @@ export interface UserQuestion {
   id: string;
   text: string;
   where?: string;
+}
+
+export interface LevelChange {
+  tech: string;
+  name: string;
+  from: number | null;
+  to: number;
 }
 
 type NewEntry = JournalEntry extends infer E ? (E extends JournalEntry ? Omit<E, 'id' | 'at'> : never) : never;
@@ -33,6 +40,28 @@ export class SessionStore implements vscode.Disposable {
   speech: boolean | 'unknown' = 'unknown';
   activity: Activity | null = null;
   private activityAt = 0;
+  /** The page the panel shows, and the project's decisions and plans for the memory page. */
+  view: PanelView = 'session';
+  memory: MemoryView | null = null;
+  private focus: { id: string; n: number } | null = null;
+
+  setView(view: PanelView): void {
+    if (view === this.view) return;
+    this.view = view;
+    this.changed();
+  }
+
+  setMemory(memory: MemoryView | null): void {
+    this.memory = memory;
+    this.memoryEmitter.fire(memory);
+  }
+
+  /** Open the memory page at one decision, with its whole record unfolded. */
+  focusDecision(id: string): void {
+    this.view = 'memory';
+    this.focus = { id, n: (this.focus?.n ?? 0) + 1 };
+    this.changed();
+  }
 
   /**
    * What Claude Code is doing, from the plugin's activity hook. Reports arrive in the background and
@@ -53,6 +82,8 @@ export class SessionStore implements vscode.Disposable {
 
   private readonly entryEmitter = new vscode.EventEmitter<JournalEntry>();
   private readonly metaEmitter = new vscode.EventEmitter<void>();
+  private readonly memoryEmitter = new vscode.EventEmitter<MemoryView | null>();
+  readonly onMemory = this.memoryEmitter.event;
   private readonly questionEmitter = new vscode.EventEmitter<UserQuestion>();
   private readonly gearEmitter = new vscode.EventEmitter<Gear>();
   readonly onEntry = this.entryEmitter.event;
@@ -97,6 +128,8 @@ export class SessionStore implements vscode.Disposable {
 
   meta(): PanelMeta {
     return {
+      view: this.view,
+      focus: this.focus,
       gear: this.gear,
       workspace: this.workspaceRoot(),
       step: this.step,
@@ -108,11 +141,91 @@ export class SessionStore implements vscode.Disposable {
       activity: this.activity,
       replay: this.replay,
       replays: this.replays,
+      levels: this.levels,
     };
   }
 
+  // Levels ---------------------------------------------------------------------------------------
+
+  /** The user's levels for this project's stack, for the Levels page. Set by the levels controller. */
+  levels: LevelsView | null = null;
+  private levelChanges: LevelChange[] = [];
+
+  setLevels(levels: LevelsView | null): void {
+    this.levels = levels;
+    this.changed();
+  }
+
+  /** A level the user changed in the editor. Claude reads it in the next tool result, as with questions. */
+  noteLevelChange(change: LevelChange): void {
+    this.levelChanges = [...this.levelChanges.filter((c) => c.tech !== change.tech), change];
+  }
+
+  takeLevelChanges(): LevelChange[] {
+    const changes = this.levelChanges;
+    this.levelChanges = [];
+    return changes;
+  }
+
+  // Answers to choices -----------------------------------------------------------------------------
+
+  private readonly answers = new Map<string, unknown>();
+  private readonly answerWakers = new Set<() => void>();
+
+  /** The user answered a choice in the panel. */
+  answer(id: string, value: unknown): void {
+    this.answers.set(id, value);
+    this.wakeAnswers();
+  }
+
+  private wakeAnswers(): void {
+    for (const w of [...this.answerWakers]) w();
+  }
+
+  /**
+   * Wait for the answer to the choice in entry `id`. Returns early when the user asks a question,
+   * and with nothing when the time runs out, so Claude can call again and keep waiting.
+   */
+  async awaitAnswer(id: string, ms: number, signal?: AbortSignal): Promise<{ answer?: unknown; question?: true }> {
+    const deadline = Date.now() + ms;
+    for (;;) {
+      if (this.answers.has(id)) {
+        const answer = this.answers.get(id);
+        this.answers.delete(id);
+        return { answer };
+      }
+      if (this.hasPendingQuestions()) return { question: true };
+      const left = deadline - Date.now();
+      if (left <= 0 || signal?.aborted) return {};
+      await new Promise<void>((resolve) => {
+        const done = () => {
+          clearTimeout(timer);
+          this.answerWakers.delete(done);
+          signal?.removeEventListener('abort', done);
+          resolve();
+        };
+        const timer = setTimeout(done, left);
+        this.answerWakers.add(done);
+        signal?.addEventListener('abort', done, { once: true });
+      });
+    }
+  }
+
+  /** The latest entry, for finding an open choice when Claude asks the same question again. */
+  find<K extends JournalEntry['kind']>(kind: K, test: (e: Extract<JournalEntry, { kind: K }>) => boolean): Extract<JournalEntry, { kind: K }> | undefined {
+    for (let i = this.journal.length - 1; i >= 0; i--) {
+      const e = this.journal[i];
+      if (e.kind === kind && test(e as Extract<JournalEntry, { kind: K }>)) return e as Extract<JournalEntry, { kind: K }>;
+    }
+    return undefined;
+  }
+
+  entry(id: string): JournalEntry | undefined {
+    return this.journal.find((e) => e.id === id);
+  }
+
   snapshot(): PanelState {
-    return { ...this.meta(), journal: [...this.journal] };
+    return { ...this.meta(), memory: this.memory, journal: [...this.journal] };
   }
 
   changed(): void {
@@ -152,6 +265,7 @@ export class SessionStore implements vscode.Disposable {
     const question = { id: entry.id, text, where, delivered: false };
     this.questions.push(question);
     this.questionEmitter.fire(question);
+    this.wakeAnswers();
     return question;
   }
 
@@ -204,6 +318,7 @@ export class SessionStore implements vscode.Disposable {
   dispose(): void {
     this.entryEmitter.dispose();
     this.metaEmitter.dispose();
+    this.memoryEmitter.dispose();
     this.questionEmitter.dispose();
     this.gearEmitter.dispose();
   }
